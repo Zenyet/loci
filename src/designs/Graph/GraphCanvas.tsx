@@ -1,0 +1,746 @@
+import type { CSSProperties } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
+import type { GraphEdge, GraphItem, GraphNode, Group, PinsMap } from '../../types';
+import { FaviconCache } from './faviconCache';
+import { buildNodeIndex, findEdgeAt, findNodeAt, type NodeIndex } from './hitTest';
+import { drawGraph, RenderTextCache, resizeCanvas, type RenderState, type Theme } from './render';
+import { clampScale, desktopCamera, useCamera, viewToWorld } from './useCamera';
+import { useGraphSim } from './useGraphSim';
+import { advanceHoverFade } from './hoverFade';
+import { HoverIntent } from './hoverIntent';
+
+interface Props {
+  interactionBlocked?: boolean;
+  bookmarks: GraphItem[];
+  groups: Group[];
+  edges: GraphEdge[];
+  /** Display-only derived edges (same cluster / same domain). Not interactive,
+   *  not fed to the physics sim. */
+  autoEdges?: GraphEdge[];
+  /** Master toggle for drawing any edges. Defaults to true. */
+  showEdges?: boolean;
+  /** id → topic hue; when set, overrides folder groupHue in rendering. */
+  topicHueById?: Map<string, number> | null;
+  pins: PinsMap;
+  filterText: string;
+  /** Precomputed set of bookmark ids that match the current filter. Passed
+   *  in from the parent so the renderer doesn't have to re-derive it every
+   *  animation frame. `null` means "no active filter". */
+  filterMatches: Set<string> | null;
+  /** When set, camera dolly-zooms onto this node. When cleared, camera resets. */
+  focusBookmarkId: string | null;
+  /** Local-graph subset: when non-null, only these nodes (and edges fully
+   *  inside the set) render at full opacity. */
+  focusNeighborhood: Set<string> | null;
+  focusKind: 'node' | 'group' | null;
+  focusGroupId: string | null;
+  /** When set, draw a soft hull around the group's nodes. */
+  highlightGroupId: string | null;
+  /** Optional explicit node set for the group hull (used for subtree focus). */
+  highlightGroupMembers?: Set<string> | null;
+  highlightGroupHue?: number | null;
+  /** Optional user-picked hue per folder id; overrides the hash default. */
+  hueOverrides?: Record<string, number>;
+  /** Shorter dolly animations when the user enables reduce motion. */
+  reduceMotion?: boolean;
+  /** Rebuilds canvas theme colors when the resolved UI theme changes. */
+  themeKey: string;
+  onRequestEdge: (fromId: string, toId: string) => void;
+  onOpenBookmark: (id: string) => void;
+  onOpenGroup: (id: string) => void;
+  onBookmarkMenu: (x: number, y: number, id: string, worldPos: { x: number; y: number }) => void;
+  onGroupMenu: (x: number, y: number, id: string) => void;
+  onEdgeMenu: (x: number, y: number, id: string) => void;
+  onCanvasMenu: (x: number, y: number) => void;
+  /** Power-user gesture: Alt+click on a node enters focus mode for it. */
+  onFocusNode: (id: string) => void;
+}
+
+const isGroupNode = (n: GraphItem | null | undefined) => n?.nodeKind === 'group';
+
+interface CameraTracking {
+  id: string;
+  targetScale: number;
+  startedAt: number;
+  settledFrames: number;
+}
+
+export function GraphCanvas(props: Props) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const sim = useGraphSim({
+    bookmarks: props.bookmarks,
+    groups: props.groups,
+    edges: props.edges,
+    pins: props.pins,
+    ...(props.hueOverrides ? { hueOverrides: props.hueOverrides } : {}),
+  });
+  const camera = useCamera(undefined, () => {
+    const bounds = wrapRef.current?.getBoundingClientRect();
+    return desktopCamera(bounds ?? { width: window.innerWidth, height: window.innerHeight });
+  });
+  const faviconsRef = useRef(new FaviconCache());
+  const textCacheRef = useRef(new RenderTextCache());
+
+  // Interaction state — kept in refs to avoid re-renders.
+  const hoverNodeRef = useRef<string | null>(null);
+  const hoverEdgeRef = useRef<string | null>(null);
+  const dragIdRef = useRef<string | null>(null);
+  // Eased 0→1 spotlight progress, advanced each frame toward its target.
+  const hoverProgressRef = useRef(0);
+  const nodeOpacityRef = useRef(new Map<string, number>());
+  const sampleHoverRef = useRef<(now: number) => boolean>(() => false);
+  const ghostRef = useRef<RenderState['ghost']>(null);
+  const panRef = useRef<{ startX: number; startY: number; tx0: number; ty0: number } | null>(null);
+  const needsFrameRef = useRef(true);
+  const scheduleFrameRef = useRef<() => void>(() => {});
+  const trackingRef = useRef<CameraTracking | null>(null);
+  const reduceMotionRef = useRef(props.reduceMotion);
+  const lastSizeRef = useRef({ width: 0, height: 0, dpr: 1 });
+  const nodeIndexRef = useRef<NodeIndex | null>(null);
+  const nodeIndexNodesRef = useRef<GraphNode[] | null>(null);
+  const nodeByIdRef = useRef<Map<string, GraphNode> | null>(null);
+  const nodeByIdNodesRef = useRef<GraphNode[] | null>(null);
+  // Mirror the filter-match set into a ref so the rAF loop can read it
+  // without having to resubscribe itself each time the filter changes.
+  const filterMatchesRef = useRef<Set<string> | null>(props.filterMatches);
+  // Same trick for focus-mode neighborhood — the rAF loop reads via ref so
+  // entering/exiting focus doesn't tear down the loop.
+  const focusNeighborhoodRef = useRef<Set<string> | null>(props.focusNeighborhood);
+  const highlightGroupMembersRef = useRef<Set<string> | null>(
+    props.highlightGroupMembers ?? null
+  );
+  const renderMetaRef = useRef({
+    focusKind: props.focusKind,
+    highlightGroupId: props.highlightGroupId,
+    highlightGroupHue: props.highlightGroupHue ?? null,
+  });
+
+  const requestFrame = () => {
+    needsFrameRef.current = true;
+    scheduleFrameRef.current();
+  };
+
+  const invalidateSpatialIndex = () => {
+    nodeIndexRef.current = null;
+  };
+
+  const invalidateNodeCaches = () => {
+    invalidateSpatialIndex();
+    nodeByIdRef.current = null;
+  };
+
+  const getNodeIndex = () => {
+    const nodes = sim.nodesRef.current;
+    if (!nodeIndexRef.current || nodeIndexNodesRef.current !== nodes) {
+      nodeIndexRef.current = buildNodeIndex(nodes);
+      nodeIndexNodesRef.current = nodes;
+    }
+    return nodeIndexRef.current;
+  };
+
+  const getNodeById = () => {
+    const nodes = sim.nodesRef.current;
+    if (!nodeByIdRef.current || nodeByIdNodesRef.current !== nodes) {
+      nodeByIdRef.current = new Map(nodes.map((n) => [n.id, n] as const));
+      nodeByIdNodesRef.current = nodes;
+    }
+    return nodeByIdRef.current;
+  };
+
+  // Preload favicons whenever bookmarks change.
+  useEffect(() => {
+    for (const b of props.bookmarks) {
+      if (b.nodeKind === 'group') continue;
+      faviconsRef.current.ensureLoaded(b.url, () => {
+        requestFrame();
+      });
+    }
+  }, [props.bookmarks]);
+
+  // Force a redraw whenever render-relevant props change. Without this the
+  // rAF loop would skip frames when the simulation has cooled (alpha ≈ 0),
+  // causing e.g. filter changes to not paint until the next interaction.
+  // Also syncs `filterMatchesRef` so the rAF loop can read the latest set
+  // without being recreated on every keystroke.
+  useEffect(() => {
+    reduceMotionRef.current = props.reduceMotion;
+    filterMatchesRef.current = props.filterMatches;
+    focusNeighborhoodRef.current = props.focusNeighborhood;
+    highlightGroupMembersRef.current = props.highlightGroupMembers ?? null;
+    renderMetaRef.current = {
+      focusKind: props.focusKind,
+      highlightGroupId: props.highlightGroupId,
+      highlightGroupHue: props.highlightGroupHue ?? null,
+    };
+    invalidateNodeCaches();
+    requestFrame();
+  }, [
+    props.filterText,
+    props.filterMatches,
+    props.focusNeighborhood,
+    props.focusKind,
+    props.edges,
+    props.autoEdges,
+    props.showEdges,
+    props.pins,
+    props.bookmarks,
+    props.highlightGroupId,
+    props.highlightGroupMembers,
+    props.highlightGroupHue,
+    props.hueOverrides,
+    props.themeKey,
+    props.reduceMotion,
+  ]);
+
+  // Enter/exit camera tracking. Search focus follows the live node position
+  // inside the rAF loop instead of scheduling repeated one-shot animations.
+  useEffect(() => {
+    const msIn = props.reduceMotion ? 1 : 520;
+    const msOut = props.reduceMotion ? 1 : 420;
+    const id = props.focusBookmarkId;
+    if (id) {
+      camera.cancelFocus();
+      trackingRef.current = {
+        id,
+        targetScale: 2.2,
+        startedAt: performance.now(),
+        settledFrames: 0,
+      };
+      requestFrame();
+    } else if (props.focusGroupId && props.focusNeighborhood?.size) {
+      trackingRef.current = null;
+      const size = lastSizeRef.current;
+      if (size.width === 0) return;
+      const members = sim.nodesRef.current.filter((n) =>
+        props.focusNeighborhood?.has(n.id)
+      );
+      if (members.length === 0) return;
+      let minX = Infinity;
+      let minY = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
+      for (const n of members) {
+        minX = Math.min(minX, n.x - n.radius);
+        minY = Math.min(minY, n.y - n.radius);
+        maxX = Math.max(maxX, n.x + n.radius);
+        maxY = Math.max(maxY, n.y + n.radius);
+      }
+      const cx = (minX + maxX) / 2;
+      const cy = (minY + maxY) / 2;
+      const w = Math.max(90, maxX - minX);
+      const h = Math.max(90, maxY - minY);
+      const fitW = Math.max(120, size.width - 180);
+      const fitH = Math.max(120, size.height - 180);
+      const fitScale = Math.min(fitW / w, fitH / h);
+      const targetScale = clampScale(Math.max(0.58, Math.min(2.1, fitScale)));
+      camera.focusOnWorldPoint(cx, cy, targetScale, size, msIn);
+      requestFrame();
+    } else {
+      trackingRef.current = null;
+      camera.focusReset(msOut);
+      requestFrame();
+    }
+    // findById reads a live ref. We also depend on filter text because search
+    // can keep the same selected id while the query narrows to a single hit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    props.focusBookmarkId,
+    props.filterText,
+    props.bookmarks,
+    props.focusGroupId,
+    props.focusNeighborhood,
+    camera,
+    props.reduceMotion,
+  ]);
+
+  // Subscribe to camera changes so we redraw when the user zooms/pans.
+  useEffect(() => {
+    return camera.subscribe(() => {
+      requestFrame();
+    });
+  }, [camera]);
+
+  // Resize observer.
+  useEffect(() => {
+    const wrap = wrapRef.current;
+    const canvas = canvasRef.current;
+    if (!wrap || !canvas) return;
+    const ro = new ResizeObserver(() => {
+      const rect = wrap.getBoundingClientRect();
+      const dpr = resizeCanvas(canvas, rect.width, rect.height);
+      lastSizeRef.current = { width: rect.width, height: rect.height, dpr };
+      requestFrame();
+    });
+    ro.observe(wrap);
+    return () => ro.disconnect();
+  }, []);
+
+  // rAF loop.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const theme: Theme = {
+      fg: getComputedStyle(document.body).getPropertyValue('--fg') || '#fff',
+      fgMuted: getComputedStyle(document.body).getPropertyValue('--fg-3') || '#888',
+      bg: getComputedStyle(document.body).getPropertyValue('--bg') || '#111',
+      line: getComputedStyle(document.body).getPropertyValue('--line') || '#333',
+    };
+
+    let raf: number | null = null;
+    let running = true;
+    let previousFrameAt: number | null = null;
+
+    const scheduleFrame = () => {
+      if (!running || raf !== null) return;
+      raf = requestAnimationFrame(loop);
+    };
+    scheduleFrameRef.current = scheduleFrame;
+
+    const updateTracking = () => {
+      const t = trackingRef.current;
+      if (!t) return false;
+      const node = sim.findById(t.id);
+      const now = performance.now();
+      if (!node) {
+        if (now - t.startedAt > 1200) trackingRef.current = null;
+        return trackingRef.current !== null;
+      }
+
+      const s = clampScale(t.targetScale);
+      const target = { scale: s, tx: -node.x * s, ty: -node.y * s };
+      const current = camera.cameraRef.current;
+      const alpha = reduceMotionRef.current ? 1 : 0.16;
+      const next = {
+        scale: current.scale + (target.scale - current.scale) * alpha,
+        tx: current.tx + (target.tx - current.tx) * alpha,
+        ty: current.ty + (target.ty - current.ty) * alpha,
+      };
+      camera.cameraRef.current = next;
+
+      const cameraDelta =
+        Math.hypot(target.tx - next.tx, target.ty - next.ty) +
+        Math.abs(target.scale - next.scale) * 120;
+      const nodeSpeed = Math.hypot(node.vx, node.vy);
+      if (cameraDelta < 0.85 && nodeSpeed < 0.08) t.settledFrames += 1;
+      else t.settledFrames = 0;
+      if (t.settledFrames >= 12 || now - t.startedAt > 1400) {
+        trackingRef.current = null;
+      }
+      return true;
+    };
+
+    const loop = (now: number) => {
+      raf = null;
+      if (!running) return;
+      if (document.visibilityState === 'hidden') return;
+
+      const hoverPending = sampleHoverRef.current(now);
+
+      const simulation = sim.simulationRef.current;
+      const alpha = simulation?.alpha() ?? 0;
+      const simActive = alpha > 0.003;
+
+      // Ease the hover spotlight toward its target each frame (snap when the
+      // user prefers reduced motion).
+      const hoverTarget = (dragIdRef.current ?? hoverNodeRef.current) ? 1 : 0;
+      const hp = hoverProgressRef.current;
+      const spotlightAnimating =
+        !reduceMotionRef.current && Math.abs(hoverTarget - hp) > 0.001;
+      hoverProgressRef.current = spotlightAnimating
+        ? hp + (hoverTarget - hp) * 0.22
+        : hoverTarget;
+      const elapsed = previousFrameAt === null ? 16 : Math.min(50, Math.max(1, now - previousFrameAt));
+      previousFrameAt = now;
+      const fadeAnimating = advanceHoverFade(
+        nodeOpacityRef.current, sim.nodesRef.current.map(node => node.id),
+        dragIdRef.current ?? hoverNodeRef.current, elapsed, !!reduceMotionRef.current,
+      );
+      const hoverAnimating = spotlightAnimating || fadeAnimating;
+
+      const active =
+        simActive ||
+        trackingRef.current !== null ||
+        needsFrameRef.current ||
+        dragIdRef.current !== null ||
+        panRef.current !== null ||
+        ghostRef.current !== null ||
+        hoverAnimating;
+
+      if (active) {
+        if (simulation && simActive) {
+          simulation.tick();
+          invalidateSpatialIndex();
+        }
+        const trackingActive = updateTracking();
+        const meta = renderMetaRef.current;
+
+        const state: RenderState = {
+          nodes: sim.nodesRef.current,
+          nodeById: getNodeById(),
+          edges:
+            props.autoEdges && props.autoEdges.length
+              ? props.edges.concat(props.autoEdges)
+              : props.edges,
+          showEdges: props.showEdges ?? true,
+          hoverProgress: hoverProgressRef.current,
+          nodeOpacity: nodeOpacityRef.current,
+          pins: props.pins,
+          hoverNodeId: hoverNodeRef.current,
+          hoverEdgeId: hoverEdgeRef.current,
+          draggingId: dragIdRef.current,
+          filterMatches: filterMatchesRef.current,
+          ghost: ghostRef.current,
+          favicons: faviconsRef.current,
+          textCache: textCacheRef.current,
+          highlightGroupId: meta.highlightGroupId,
+          highlightGroupMembers: highlightGroupMembersRef.current,
+          highlightGroupHue: meta.highlightGroupHue,
+          focusNeighborhood: focusNeighborhoodRef.current,
+          focusKind: meta.focusKind,
+          topicHueById: props.topicHueById ?? null,
+        };
+        drawGraph(ctx, state, camera.cameraRef.current, theme, lastSizeRef.current);
+        needsFrameRef.current = false;
+
+        const nextAlpha = simulation?.alpha() ?? 0;
+        if (
+          nextAlpha > 0.003 ||
+          trackingActive ||
+          trackingRef.current !== null ||
+          dragIdRef.current !== null ||
+          panRef.current !== null ||
+          ghostRef.current !== null ||
+          hoverAnimating ||
+          needsFrameRef.current
+        ) {
+          scheduleFrame();
+        } else previousFrameAt = null;
+      }
+      // Waiting for intent needs timestamps, but does not repaint the graph.
+      if (hoverPending) scheduleFrame();
+    };
+
+    scheduleFrame();
+    const onVis = () => {
+      if (document.visibilityState === 'visible') {
+        requestFrame();
+      }
+    };
+    document.addEventListener('visibilitychange', onVis);
+
+    return () => {
+      running = false;
+      if (raf !== null) cancelAnimationFrame(raf);
+      if (scheduleFrameRef.current === scheduleFrame) {
+        scheduleFrameRef.current = () => {};
+      }
+      document.removeEventListener('visibilitychange', onVis);
+    };
+    // filterMatches is read via filterMatchesRef so it doesn't belong here;
+    // recreating the rAF loop on each keystroke would just churn timers.
+  }, [sim, props.bookmarks, props.edges, props.autoEdges, props.showEdges, props.topicHueById, props.pins, props.themeKey, camera]);
+
+  // A modal can appear while a node is highlighted or a pointer is captured.
+  // Clear the interaction before paint; merely covering the canvas is not enough.
+  useLayoutEffect(() => {
+    if (!props.interactionBlocked) return;
+    hoverNodeRef.current = null;
+    hoverEdgeRef.current = null;
+    hoverProgressRef.current = 0;
+    nodeOpacityRef.current.clear();
+    if (dragIdRef.current) sim.endDrag(false);
+    dragIdRef.current = null;
+    panRef.current = null;
+    ghostRef.current = null;
+    if (canvasRef.current) canvasRef.current.style.cursor = 'grab';
+    requestFrame();
+  }, [props.interactionBlocked, sim]);
+
+  // Pointer events.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || props.interactionBlocked) return;
+
+    const cancelTracking = () => {
+      trackingRef.current = null;
+    };
+
+    const toWorld = (ev: PointerEvent): [number, number] => {
+      const rect = canvas.getBoundingClientRect();
+      return viewToWorld(
+        camera.cameraRef.current,
+        ev.clientX - rect.left,
+        ev.clientY - rect.top,
+        { width: rect.width, height: rect.height }
+      );
+    };
+
+    const nodeAt = (wx: number, wy: number) => findNodeAt(getNodeIndex(), wx, wy);
+    const edgeAt = (wx: number, wy: number) =>
+      findEdgeAt(props.edges, getNodeById(), wx, wy, 6 / camera.cameraRef.current.scale);
+
+    let latestPointer: { clientX: number; clientY: number } | null = null;
+    let hoverIntent = new HoverIntent({ nodeId: hoverNodeRef.current, edgeId: hoverEdgeRef.current });
+    const clearHover = () => {
+      latestPointer = null;
+      hoverIntent = new HoverIntent();
+      if (hoverNodeRef.current !== null || hoverEdgeRef.current !== null) {
+        hoverNodeRef.current = null;
+        hoverEdgeRef.current = null;
+        requestFrame();
+      }
+      canvas.style.cursor = 'grab';
+    };
+    const sampleHover = (now: number): boolean => {
+      if (latestPointer) {
+        const point = latestPointer;
+        latestPointer = null;
+        const rect = canvas.getBoundingClientRect();
+        const [wx, wy] = viewToWorld(camera.cameraRef.current, point.clientX - rect.left, point.clientY - rect.top, { width: rect.width, height: rect.height });
+        const node = nodeAt(wx, wy);
+        const edge = node ? null : edgeAt(wx, wy);
+        hoverIntent.offer({ nodeId: node?.id ?? null, edgeId: edge?.id ?? null }, now);
+        canvas.style.cursor = node ? 'pointer' : 'grab';
+      }
+      const pending = hoverIntent.advance(now);
+      const next = hoverIntent.active;
+      if (next.nodeId !== hoverNodeRef.current || next.edgeId !== hoverEdgeRef.current) {
+        hoverNodeRef.current = next.nodeId;
+        hoverEdgeRef.current = next.edgeId;
+        requestFrame();
+      }
+      return pending;
+    };
+    sampleHoverRef.current = sampleHover;
+
+    let capturedPointerId: number | null = null;
+    let ghostFromId: string | null = null;
+    // A pointer-down on a node stays "pending": we don't touch the physics
+    // simulation until the cursor moves past the slop threshold. Pure clicks
+    // (down+up with no movement) therefore never reheat the sim, so
+    // unrelated nodes don't wobble every time the user opens a bookmark.
+    let pendingDrag: { id: string; downX: number; downY: number; pointerId: number } | null =
+      null;
+    const CLICK_SLOP_PX = 4;
+
+    const promoteToDrag = (wx: number, wy: number) => {
+      if (!pendingDrag) return;
+      dragIdRef.current = pendingDrag.id;
+      sim.startDrag(pendingDrag.id, wx, wy);
+      try {
+        canvas.setPointerCapture(pendingDrag.pointerId);
+        capturedPointerId = pendingDrag.pointerId;
+      } catch {
+        /* pointer already gone */
+      }
+      pendingDrag = null;
+    };
+
+    const onDown = (ev: PointerEvent) => {
+      if (ev.button === 2) return; // right-click handled on contextmenu
+      clearHover();
+      cancelTracking();
+      camera.cancelFocus(); // user is taking over
+      const [wx, wy] = toWorld(ev);
+      const node = nodeAt(wx, wy);
+      if (node && ev.shiftKey && !isGroupNode(node)) {
+        ghostFromId = node.id;
+        ghostRef.current = { fromX: node.x, fromY: node.y, toX: wx, toY: wy };
+        requestFrame();
+      } else if (node && ev.altKey) {
+        if (isGroupNode(node)) {
+          props.onOpenGroup(node.groupId ?? node.id);
+          return;
+        }
+        // Alt+click on a node enters focus (local-graph) mode for it. We
+        // intentionally don't promote to drag or fire onOpenBookmark here.
+        props.onFocusNode(node.id);
+      } else if (node) {
+        pendingDrag = {
+          id: node.id,
+          downX: ev.clientX,
+          downY: ev.clientY,
+          pointerId: ev.pointerId,
+        };
+      } else {
+        panRef.current = {
+          startX: ev.clientX,
+          startY: ev.clientY,
+          tx0: camera.cameraRef.current.tx,
+          ty0: camera.cameraRef.current.ty,
+        };
+      }
+    };
+
+    const onMove = (ev: PointerEvent) => {
+      const hasGesture =
+        pendingDrag ||
+        dragIdRef.current ||
+        ghostFromId ||
+        panRef.current;
+      if (!hasGesture) {
+        if (ev.target !== canvas) { clearHover(); return; }
+        latestPointer = { clientX: ev.clientX, clientY: ev.clientY };
+        scheduleFrameRef.current();
+        return;
+      }
+      const [wx, wy] = toWorld(ev);
+      if (pendingDrag) {
+        // Promote to a real drag only once the user moves past the slop.
+        if (
+          Math.abs(ev.clientX - pendingDrag.downX) > CLICK_SLOP_PX ||
+          Math.abs(ev.clientY - pendingDrag.downY) > CLICK_SLOP_PX
+        ) {
+          promoteToDrag(wx, wy);
+        }
+      }
+      if (dragIdRef.current) {
+        sim.dragTo(wx, wy);
+        invalidateSpatialIndex();
+        requestFrame();
+        return;
+      }
+      if (ghostFromId) {
+        const from = sim.findById(ghostFromId);
+        if (from) ghostRef.current = { fromX: from.x, fromY: from.y, toX: wx, toY: wy };
+        requestFrame();
+        return;
+      }
+      if (panRef.current) {
+        const dx = ev.clientX - panRef.current.startX;
+        const dy = ev.clientY - panRef.current.startY;
+        camera.cameraRef.current = {
+          ...camera.cameraRef.current,
+          tx: panRef.current.tx0 + dx,
+          ty: panRef.current.ty0 + dy,
+        };
+        requestFrame();
+        return;
+      }
+    };
+
+    const onUp = (ev: PointerEvent) => {
+      const [wx, wy] = toWorld(ev);
+      if (ghostFromId) {
+        const target = nodeAt(wx, wy);
+        if (target && target.id !== ghostFromId) {
+          props.onRequestEdge(ghostFromId, target.id);
+        }
+        ghostFromId = null;
+        ghostRef.current = null;
+        requestFrame();
+        return;
+      }
+      if (pendingDrag) {
+        // Pointer never crossed slop → this is a pure click. Open without
+        // touching the physics simulation.
+        const clicked = sim.findById(pendingDrag.id);
+        if (clicked && isGroupNode(clicked)) props.onOpenGroup(clicked.groupId ?? clicked.id);
+        else props.onOpenBookmark(pendingDrag.id);
+        pendingDrag = null;
+        return;
+      }
+      if (dragIdRef.current) {
+        sim.endDrag(false);
+        dragIdRef.current = null;
+        invalidateSpatialIndex();
+        try {
+          canvas.releasePointerCapture(ev.pointerId);
+          capturedPointerId = null;
+        } catch {
+          /* already released */
+        }
+        requestFrame();
+        return;
+      }
+      panRef.current = null;
+    };
+
+    const onWheel = (ev: WheelEvent) => {
+      ev.preventDefault();
+      clearHover();
+      cancelTracking();
+      const rect = canvas.getBoundingClientRect();
+      camera.wheelZoom(ev.clientX - rect.left, ev.clientY - rect.top, ev.deltaY, {
+        width: rect.width,
+        height: rect.height,
+      });
+    };
+
+    const onDblClick = () => {
+      cancelTracking();
+      camera.reset();
+      sim.reheat(0.3);
+      requestFrame();
+    };
+
+    const onCtx = (ev: MouseEvent) => {
+      ev.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      const [wx, wy] = viewToWorld(
+        camera.cameraRef.current,
+        ev.clientX - rect.left,
+        ev.clientY - rect.top,
+        { width: rect.width, height: rect.height }
+      );
+      const node = nodeAt(wx, wy);
+      if (node) {
+        if (isGroupNode(node)) {
+          return props.onGroupMenu(ev.clientX, ev.clientY, node.groupId ?? node.id);
+        }
+        return props.onBookmarkMenu(ev.clientX, ev.clientY, node.id, { x: node.x, y: node.y });
+      }
+      const edge = edgeAt(wx, wy);
+      if (edge) return props.onEdgeMenu(ev.clientX, ev.clientY, edge.id);
+      props.onCanvasMenu(ev.clientX, ev.clientY);
+    };
+
+    canvas.addEventListener('pointerdown', onDown);
+    canvas.addEventListener('pointerleave', clearHover);
+    window.addEventListener('blur', clearHover);
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    canvas.addEventListener('wheel', onWheel, { passive: false });
+    canvas.addEventListener('dblclick', onDblClick);
+    canvas.addEventListener('contextmenu', onCtx);
+    return () => {
+      if (sampleHoverRef.current === sampleHover) sampleHoverRef.current = () => false;
+      if (capturedPointerId !== null && canvas.hasPointerCapture(capturedPointerId)) {
+        canvas.releasePointerCapture(capturedPointerId);
+      }
+      canvas.removeEventListener('pointerdown', onDown);
+      canvas.removeEventListener('pointerleave', clearHover);
+      window.removeEventListener('blur', clearHover);
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      canvas.removeEventListener('wheel', onWheel);
+      canvas.removeEventListener('dblclick', onDblClick);
+      canvas.removeEventListener('contextmenu', onCtx);
+    };
+  }, [sim, camera, props]);
+
+  return (
+    <div ref={wrapRef} style={wrapStyle}>
+      <canvas ref={canvasRef} style={canvasStyle} />
+    </div>
+  );
+}
+
+const wrapStyle: CSSProperties = {
+  position: 'relative',
+  flex: 1,
+  minHeight: 0,
+  minWidth: 0,
+  overflow: 'hidden',
+};
+
+const canvasStyle: CSSProperties = {
+  display: 'block',
+  width: '100%',
+  height: '100%',
+  cursor: 'grab',
+};

@@ -1,0 +1,130 @@
+import type { CSSProperties } from 'react';
+import { useEffect, useState } from 'react';
+import type { Group } from '../types';
+import { copy } from '../i18n';
+import { Modal } from './Modal';
+import { GroupSelect } from './GroupSelect';
+import { TextInput } from './TextInput';
+import { Icon } from './Icon';
+
+interface Props {
+  open: boolean;
+  mode: 'create' | 'edit';
+  initial?: { name: string; url: string; groupId: string };
+  groups: Group[];
+  looseGroupId?: string | null;
+  hueOverrides?: Record<string, number>;
+  defaultGroupId?: string;
+  onCancel: () => void;
+  onSubmit: (values: { name: string; url: string; groupId: string }) => void;
+}
+
+export function BookmarkDialog({
+  open,
+  mode,
+  initial,
+  groups,
+  looseGroupId,
+  hueOverrides,
+  defaultGroupId,
+  onCancel,
+  onSubmit,
+}: Props) {
+  const [name, setName] = useState('');
+  const [url, setUrl] = useState('');
+  const [groupId, setGroupId] = useState('');
+
+  useEffect(() => {
+    if (!open) return;
+    setName(initial?.name ?? '');
+    setUrl(initial?.url ?? '');
+    setGroupId(initial?.groupId ?? defaultGroupId ?? looseGroupId ?? groups[0]?.id ?? '');
+  }, [open, initial, defaultGroupId, looseGroupId, groups]);
+
+  const valid = url.trim().length > 3 && groupId;
+
+  const submit = () => {
+    if (!valid) return;
+    let finalUrl = url.trim();
+    if (!/^https?:\/\//.test(finalUrl)) finalUrl = `https://${finalUrl}`;
+    onSubmit({
+      name: name.trim() || new URL(finalUrl).hostname,
+      url: finalUrl,
+      groupId,
+    });
+  };
+
+  const title = mode === 'create' ? copy.workspace.addBookmarkTitle : copy.workspace.editBookmarkTitle;
+
+  return (
+    <Modal open={open} onClose={onCancel} title={title} allowOverflow>
+      <Field label={copy.workspace.bookmarkUrl}>
+        <TextInput
+          autoFocus
+          value={url}
+          onChange={setUrl}
+          aria-label={copy.workspace.bookmarkUrl}
+          leading={<Icon name="link" size={16} />}
+          placeholder="https://example.com"
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') submit();
+          }}
+        />
+      </Field>
+      <Field label={copy.workspace.bookmarkName}>
+        <TextInput
+          value={name}
+          onChange={setName}
+          aria-label={copy.workspace.bookmarkName}
+          leading={<Icon name="bookmark" size={16} />}
+          placeholder="Example"
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') submit();
+          }}
+        />
+      </Field>
+      <Field label={copy.workspace.bookmarkGroup}>
+        <GroupSelect
+          value={groupId}
+          groups={groups}
+          looseGroupId={looseGroupId}
+          hueOverrides={hueOverrides}
+          onChange={setGroupId}
+        />
+      </Field>
+      <div className="dialog-actions">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="dialog-button dialog-button--ghost"
+        >
+          {copy.workspace.cancel}
+        </button>
+        <button
+          type="button"
+          onClick={submit}
+          disabled={!valid}
+          className="dialog-button dialog-button--primary"
+        >
+          {copy.workspace.ok}
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <span style={s.label}>{label}</span>
+      {children}
+    </div>
+  );
+}
+
+const s: Record<string, CSSProperties> = {
+  label: {
+    fontSize: 12,
+    color: 'var(--fg-2)',
+  },
+};

@@ -1,0 +1,51 @@
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--glass-mask);
+  -webkit-backdrop-filter: blur(9px);
+  backdrop-filter: blur(9px);
+}
+.modal-window {
+  position: relative;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100dvh - 48px);
+  border: 1px solid var(--glass-edge);
+  border-radius: var(--radius-modal);
+  background: var(--glass-surface);
+  box-shadow: var(--glass-shadow);
+  isolation: isolate;
+}
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 21px 22px 16px;
+}
+.modal-title { font-size: 16px; font-weight: 600; color: var(--fg); }
+.modal-close {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--ui-muted-bg);
+  color: var(--fg-2);
+}
+.modal-close:hover { background: var(--ui-control-bg-hover); color: var(--fg); }
+.modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 17px;
+  padding: 0 22px 22px;
+}
+.modal-body .ui-text-field { background: var(--glass-control); border-radius: 12px; min-height: 40px; }
+.modal-body .ui-text-field input { height: 38px; font-size: 13px; }
+.modal-body .dialog-actions { padding-top: 3px; }
+.modal-body .dialog-button { border-radius: 11px; box-shadow: inset 0 1px 0 var(--glass-highlight), 0 1px 2px #00000006; }
+.modal-body .dialog-button--ghost { background: var(--glass-control); }

@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "Loci",
+  "short_name": "Loci",
+  "version": "0.1.2",
+  "description": "Turn Chrome bookmarks into a searchable graph new tab.",
+  "chrome_url_overrides": {
+    "newtab": "index.html"
+  },
+  "permissions": ["bookmarks", "history", "topSites", "storage"],
+  "icons": {
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  }
+}

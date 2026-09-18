@@ -1,0 +1,144 @@
+/* Loci desktop materials. Shared by the graph, sheets and settings. */
+:root {
+  --bg: oklch(0.22 0.008 265);
+  --bg-1: oklch(0.26 0.008 265);
+  --bg-2: oklch(0.3 0.008 265);
+  --bg-3: oklch(0.38 0.008 265);
+  --line: oklch(0.39 0.008 265);
+  --line-soft: oklch(0.33 0.008 265);
+  --fg: oklch(0.96 0.006 80);
+  --fg-1: oklch(0.82 0.006 80);
+  --fg-2: oklch(0.72 0.008 265);
+  --fg-3: oklch(0.62 0.008 265);
+  --accent: oklch(0.6 0.2 260);
+  --accent-ink: #fff;
+  --accent-soft: oklch(0.6 0.2 260 / 0.14);
+  --good: oklch(0.78 0.14 150);
+  --info: oklch(0.78 0.12 240);
+  --warn: oklch(0.8 0.15 80);
+
+  --ui-panel: color-mix(in oklch, var(--bg-1) 72%, transparent);
+  --ui-panel-soft: color-mix(in oklch, var(--bg) 20%, transparent);
+  --ui-panel-strong: color-mix(in oklch, var(--bg-1) 90%, transparent);
+  --ui-control-bg: color-mix(in oklch, var(--fg) 5%, var(--bg-1));
+  --ui-control-bg-hover: color-mix(in oklch, var(--fg) 10%, var(--bg-1));
+  --ui-control-bg-active: color-mix(in oklch, var(--fg) 14%, var(--bg-1));
+  --ui-control-border: color-mix(in oklch, var(--fg) 12%, transparent);
+  --ui-control-border-hover: color-mix(in oklch, var(--fg) 24%, transparent);
+  --ui-outline: color-mix(in oklch, var(--fg) 34%, transparent);
+  --ui-outline-soft: color-mix(in oklch, var(--fg) 18%, transparent);
+  --ui-muted-bg: color-mix(in oklch, var(--fg-3) 10%, transparent);
+
+  /* Quiet desktop controls, matching the settings buttons without glass rims. */
+  --ui-floating-bg: rgb(43 44 48 / 96%);
+  --ui-floating-border: rgb(255 255 255 / 9%);
+  --ui-floating-shadow: 0 1px 3px rgb(0 0 0 / 18%);
+  --ui-popover-shadow: 0 18px 48px -14px rgb(0 0 0 / 45%);
+
+  --glass-surface: rgb(37 38 42 / 90%);
+  --glass-menu: rgb(42 43 47 / 95%);
+  --glass-control: rgb(57 58 62 / 74%);
+  --glass-edge: rgb(255 255 255 / 17%);
+  --glass-highlight: rgb(255 255 255 / 12%);
+  --glass-mask: rgb(17 19 25 / 24%);
+  --glass-shadow: inset 0 1px 0 rgb(255 255 255 / 12%), 0 24px 65px -18px rgb(0 0 0 / 50%), 0 0 0 1px rgb(0 0 0 / 14%);
+  --danger: #f97873;
+
+  --radius: 16px;
+  --radius-sm: 11px;
+  --radius-lg: 24px;
+  --radius-modal: 18px;
+
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue",
+    "PingFang SC", sans-serif;
+  --font-mono:
+    ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Consolas, monospace;
+
+  --shadow-sm: 0 1px 0 oklch(1 0 0 / 0.04) inset, 0 1px 2px oklch(0 0 0 / 0.3);
+  --shadow-md: 0 1px 0 oklch(1 0 0 / 0.05) inset, 0 8px 24px oklch(0 0 0 / 0.4);
+  --shadow-lg:
+    0 1px 0 oklch(1 0 0 / 0.06) inset, 0 20px 60px oklch(0 0 0 / 0.55);
+}
+
+@media (max-width: 560px) {
+  :root {
+    --radius-modal: 16px;
+  }
+}
+
+[data-theme="light"] {
+  --ui-floating-bg: rgb(250 249 248 / 94%);
+  --ui-floating-border: rgb(52 44 40 / 9%);
+  --ui-floating-shadow: 0 1px 3px rgb(32 24 22 / 5%);
+  --ui-popover-shadow: 0 18px 48px -14px rgb(49 40 33 / 22%);
+  --glass-surface: rgb(249 248 247 / 90%);
+  --glass-menu: rgb(255 254 253 / 95%);
+  --glass-control: rgb(255 255 255 / 66%);
+  --glass-edge: rgb(255 255 255 / 80%);
+  --glass-highlight: rgb(255 255 255 / 85%);
+  --glass-mask: rgb(23 25 32 / 16%);
+  --glass-shadow: inset 0 1px 0 #ffffffd9, 0 24px 65px -18px rgb(49 40 33 / 28%), 0 0 0 1px rgb(40 32 27 / 9%);
+  --danger: #cf4847;
+  --bg: oklch(0.975 0.006 75);
+  --bg-1: oklch(0.99 0.003 75);
+  --bg-2: oklch(0.945 0.004 75);
+  --bg-3: oklch(0.86 0.006 75);
+  --line: oklch(0.86 0.004 75);
+  --line-soft: oklch(0.91 0.004 75);
+  --fg: oklch(0.22 0.01 80);
+  --fg-1: oklch(0.36 0.01 80);
+  --fg-2: oklch(0.52 0.01 80);
+  --fg-3: oklch(0.57 0.008 75);
+  --shadow-sm: 0 1px 0 oklch(1 0 0 / 0.6) inset, 0 1px 2px oklch(0 0 0 / 0.06);
+  --shadow-md: 0 1px 0 oklch(1 0 0 / 0.8) inset, 0 6px 18px oklch(0 0 0 / 0.08);
+  --shadow-lg:
+    0 1px 0 oklch(1 0 0 / 0.9) inset, 0 20px 50px oklch(0 0 0 / 0.12);
+}
+
+body[data-bg="grain"] {
+  background-image:
+    radial-gradient(oklch(1 0 0 / 0.025) 1px, transparent 1px),
+    radial-gradient(oklch(1 0 0 / 0.015) 1px, transparent 1px);
+  background-size:
+    3px 3px,
+    7px 7px;
+  background-position:
+    0 0,
+    1px 2px;
+}
+body[data-theme="light"][data-bg="grain"] {
+  background-image:
+    radial-gradient(oklch(0 0 0 / 0.04) 1px, transparent 1px),
+    radial-gradient(oklch(0 0 0 / 0.02) 1px, transparent 1px);
+}
+body[data-bg="grid"] {
+  background-image:
+    linear-gradient(to right, var(--line-soft) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--line-soft) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+/* Custom image background. The ::before layer lets us layer a dimming tint
+   above the photo without darkening UI on top of it. */
+body[data-bg="image"] {
+  background-image: var(--bg-image, none);
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+}
+body[data-bg="image"]::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background: oklch(0 0 0 / var(--bg-image-dim, 0.35));
+}
+body[data-theme="light"][data-bg="image"]::before {
+  background: oklch(1 0 0 / var(--bg-image-dim, 0.25));
+}
+body[data-density="compact"] .card,
+body[data-density="compact"] [data-card] {
+  padding: 10px !important;
+}

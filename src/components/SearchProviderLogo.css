@@ -1,0 +1,6 @@
+.search-provider-mark {
+  display: block;
+  flex-shrink: 0;
+  object-fit: contain;
+}
+[data-theme="dark"] .search-provider-mark--chatgpt { filter: invert(1); }

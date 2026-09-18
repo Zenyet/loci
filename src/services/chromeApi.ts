@@ -1,0 +1,471 @@
+import type { Bookmark, ChromeData, Group, HistoryItem, Settings } from '../types';
+import { DEFAULT_SETTINGS } from '../types';
+import {
+  mockCreateBookmark,
+  mockCreateFolder,
+  mockLoadData,
+  mockMove,
+  mockRemove,
+  mockRemoveTree,
+  mockSubscribe,
+  mockUpdate,
+} from './mockBookmarks';
+
+// ─── Chrome API detection ─────────────────────────────────────────────────
+
+export const hasChromeApi: boolean =
+  typeof chrome !== 'undefined' && typeof chrome.bookmarks !== 'undefined';
+
+// ─── Deterministic color + letter assignment ──────────────────────────────
+
+const PALETTE = [
+  '#1a1a1a', '#5e6ad2', '#a259ff', '#e8e8e3', '#4a154b', '#ea4335',
+  '#4285f4', '#1fa463', '#ff0033', '#1db954', '#e50914', '#ff4500',
+  '#000000', '#cc785c', '#10a37f', '#007acc', '#ff6363', '#f48024',
+  '#ff6600', '#ff6719', '#202020',
+];
+
+function hashStr(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) {
+    h = (h * 31 + s.charCodeAt(i)) | 0;
+  }
+  return Math.abs(h);
+}
+
+function colorFor(url: string): string {
+  return PALETTE[hashStr(url) % PALETTE.length]!;
+}
+
+function letterFor(name: string): string {
+  const words = name.trim().split(/\s+/);
+  const first = words[0] || '?';
+  // For non-Latin text use the first character alone.
+  if (/[^\x00-\x7F]/.test(first)) return first[0]!;
+  if (words.length >= 2) {
+    return (first[0]! + words[1]![0]).toUpperCase();
+  }
+  return (first[0]! + (first[1] || first[0]!)).toUpperCase();
+}
+
+function domainOf(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return url;
+  }
+}
+
+function formatLast(ms: number | undefined): string {
+  if (!ms) return '—';
+  const diff = Date.now() - ms;
+  const mins = Math.round(diff / 60_000);
+  if (mins < 1) return '刚刚';
+  if (mins < 60) return `${mins} 分钟前`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs} 小时前`;
+  const days = Math.round(hrs / 24);
+  return `${days} 天前`;
+}
+
+function formatClock(ms: number): string {
+  const d = new Date(ms);
+  return `${d.getHours().toString().padStart(2, '0')}:${d
+    .getMinutes()
+    .toString()
+    .padStart(2, '0')}`;
+}
+
+// ─── Bookmarks tree → flat lists ──────────────────────────────────────────
+
+async function loadBookmarks(): Promise<{
+  bookmarks: Bookmark[];
+  groups: Group[];
+  barId: string | null;
+}> {
+  if (!hasChromeApi) return { bookmarks: [], groups: [], barId: null };
+  const tree = await chrome.bookmarks.getTree();
+  const root = tree[0];
+  if (!root?.children) return { bookmarks: [], groups: [], barId: null };
+
+  const bar = root.children.find((n) => n.id === '1') || root.children[0];
+  if (!bar?.children) return { bookmarks: [], groups: [], barId: null };
+  const barId = bar.id;
+
+  const bookmarks: Bookmark[] = [];
+  const groups: Group[] = [];
+
+  // Walk the full sub-tree under the bar. Every folder becomes its own
+  // group with a `parentGroupId` link so the UI can render nested folders
+  // as a tree. URL bookmarks keep their immediate `parentId` — which now
+  // consistently points to a group id — so graph clustering "just works"
+  // for nested folders too.
+  const walk = (
+    node: chrome.bookmarks.BookmarkTreeNode,
+    groupLabelForUrls: string,
+    depth: number
+  ) => {
+    if (!node.children) return;
+    for (const child of node.children) {
+      if (child.url) {
+        const label = child.title || domainOf(child.url);
+        bookmarks.push({
+          id: child.id,
+          parentId: child.parentId || node.id,
+          name: label,
+          url: child.url,
+          group: groupLabelForUrls,
+          color: colorFor(child.url),
+          letter: letterFor(label),
+          visits: 0,
+          last: '—',
+        });
+      } else {
+        const subLabel = child.title || '未命名';
+        const childDepth = node.id === barId ? 0 : depth + 1;
+        groups.push({
+          id: child.id,
+          label: subLabel,
+          parentGroupId: node.id === barId ? null : node.id,
+          depth: childDepth,
+        });
+        walk(child, subLabel, childDepth);
+      }
+    }
+  };
+  walk(bar, '未分组', 0);
+
+  return { bookmarks, groups, barId };
+}
+
+// ─── History + visit counts ───────────────────────────────────────────────
+
+async function loadHistory(): Promise<{
+  recents: HistoryItem[];
+  visitsByUrl: Map<string, { count: number; last: number }>;
+}> {
+  if (!hasChromeApi || !chrome.history) {
+    return { recents: [], visitsByUrl: new Map() };
+  }
+  try {
+    const items = await chrome.history.search({
+      text: '',
+      startTime: Date.now() - 30 * 86_400_000,
+      maxResults: 2000,
+    });
+
+    const visitsByUrl = new Map<string, { count: number; last: number }>();
+    for (const it of items) {
+      if (!it.url) continue;
+      const d = domainOf(it.url);
+      const prev = visitsByUrl.get(d) || { count: 0, last: 0 };
+      visitsByUrl.set(d, {
+        count: prev.count + (it.visitCount || 1),
+        last: Math.max(prev.last, it.lastVisitTime || 0),
+      });
+    }
+
+    const recents: HistoryItem[] = items
+      .filter((i) => i.url && i.title)
+      .sort((a, b) => (b.lastVisitTime || 0) - (a.lastVisitTime || 0))
+      .slice(0, 20)
+      .map((i) => ({
+        title: i.title || domainOf(i.url!),
+        url: domainOf(i.url!),
+        at: formatClock(i.lastVisitTime || Date.now()),
+        lastVisitTime: i.lastVisitTime || 0,
+      }));
+
+    return { recents, visitsByUrl };
+  } catch {
+    return { recents: [], visitsByUrl: new Map() };
+  }
+}
+
+// ─── Top sites (fallback source) ──────────────────────────────────────────
+
+async function loadTopSites(barId: string): Promise<{ bookmarks: Bookmark[]; groups: Group[] }> {
+  if (!hasChromeApi || !chrome.topSites) return { bookmarks: [], groups: [] };
+  try {
+    const sites = await chrome.topSites.get();
+    const bms: Bookmark[] = sites.slice(0, 20).map((s, i) => ({
+      id: `ts-${i}`,
+      parentId: barId,
+      name: s.title || domainOf(s.url),
+      url: s.url,
+      group: '常用',
+      color: colorFor(s.url),
+      letter: letterFor(s.title || domainOf(s.url)),
+      visits: 100 - i * 3,
+      last: '—',
+    }));
+    return { bookmarks: bms, groups: [] };
+  } catch {
+    return { bookmarks: [], groups: [] };
+  }
+}
+
+// ─── Public: aggregate loader ─────────────────────────────────────────────
+
+export async function loadChromeData(): Promise<ChromeData> {
+  if (!hasChromeApi) {
+    // In dev we back CRUD with a localStorage-based mock, so loading just
+    // replays that state. First-run seeds from the FALLBACK fixtures so the
+    // initial screen looks identical to the old read-only fallback path.
+    const m = mockLoadData();
+    return {
+      bookmarks: m.bookmarks,
+      recents: m.recents,
+      groups: m.groups,
+      barId: m.barId,
+      source: 'fallback',
+    };
+  }
+
+  let { bookmarks, groups, barId } = await loadBookmarks();
+  const { recents, visitsByUrl } = await loadHistory();
+
+  if (bookmarks.length === 0 && barId) {
+    const ts = await loadTopSites(barId);
+    bookmarks = ts.bookmarks;
+    groups = ts.groups;
+  }
+
+  for (const b of bookmarks) {
+    const v = visitsByUrl.get(domainOf(b.url));
+    if (v) {
+      b.visits = v.count;
+      b.last = formatLast(v.last);
+    }
+  }
+
+  if (bookmarks.length === 0) {
+    return {
+      bookmarks,
+      recents,
+      groups,
+      barId,
+      source: 'chrome',
+    };
+  }
+
+  return { bookmarks, recents, groups, barId, source: 'chrome' };
+}
+
+// ─── CRUD on bookmarks and folders ────────────────────────────────────────
+
+export async function createBookmark(
+  parentId: string,
+  title: string,
+  url: string
+): Promise<string> {
+  if (!hasChromeApi) return mockCreateBookmark(parentId, title, url);
+  const node = await chrome.bookmarks.create({ parentId, title, url });
+  return node.id;
+}
+
+export async function removeBookmark(id: string): Promise<void> {
+  if (!hasChromeApi) return mockRemove(id);
+  await chrome.bookmarks.remove(id);
+}
+
+export async function updateBookmark(
+  id: string,
+  changes: { title?: string; url?: string }
+): Promise<void> {
+  if (!hasChromeApi) return mockUpdate(id, changes);
+  await chrome.bookmarks.update(id, changes);
+}
+
+export async function moveBookmark(
+  id: string,
+  dest: { parentId?: string; index?: number }
+): Promise<void> {
+  if (!hasChromeApi) return mockMove(id, dest);
+  await chrome.bookmarks.move(id, dest);
+}
+
+export async function createFolder(parentId: string, title: string): Promise<string> {
+  if (!hasChromeApi) return mockCreateFolder(parentId, title);
+  const node = await chrome.bookmarks.create({ parentId, title });
+  return node.id;
+}
+
+export async function renameFolder(id: string, title: string): Promise<void> {
+  if (!hasChromeApi) return mockUpdate(id, { title });
+  await chrome.bookmarks.update(id, { title });
+}
+
+export async function removeFolder(id: string): Promise<void> {
+  if (!hasChromeApi) return mockRemoveTree(id);
+  await chrome.bookmarks.removeTree(id);
+}
+
+/** Non-recursive: removes an (expected-empty) folder. chrome.bookmarks.remove
+ *  THROWS on a non-empty folder, so a stranded child is preserved rather than deleted. */
+export async function removeEmptyFolder(id: string): Promise<void> {
+  if (!hasChromeApi) return mockRemove(id);
+  await chrome.bookmarks.remove(id);
+}
+
+export async function moveFolder(
+  id: string,
+  dest: { parentId?: string; index?: number }
+): Promise<void> {
+  if (!hasChromeApi) return mockMove(id, dest);
+  await chrome.bookmarks.move(id, dest);
+}
+
+// ─── Bookmark change subscription ─────────────────────────────────────────
+
+export function subscribeBookmarkChanges(cb: () => void): () => void {
+  if (!hasChromeApi) return mockSubscribe(cb);
+  if (!chrome.bookmarks.onCreated) return () => {};
+  const handlers: Array<() => void> = [];
+  const register = <T extends chrome.events.Event<(...args: any[]) => void>>(
+    ev: T
+  ) => {
+    ev.addListener(cb);
+    handlers.push(() => ev.removeListener(cb));
+  };
+  register(chrome.bookmarks.onCreated);
+  register(chrome.bookmarks.onRemoved);
+  register(chrome.bookmarks.onChanged);
+  register(chrome.bookmarks.onMoved);
+  return () => handlers.forEach((h) => h());
+}
+
+// ─── Settings (chrome.storage.local with localStorage fallback) ───────────
+
+const SETTINGS_KEY = 'newtab-settings';
+const VALID_THEMES = new Set(['dark', 'light', 'system']);
+
+const VALID_AI_PROVIDERS = new Set(['off', 'anthropic', 'openai', 'google', 'deepseek', 'alibaba', 'moonshot', 'zhipu', 'baichuan', 'minimax', 'openrouter', 'cloudflare', 'groq', 'custom']);
+
+export function normalizeSettings(raw: Partial<Settings> | null | undefined): Settings {
+  const next = { ...DEFAULT_SETTINGS, ...(raw ?? {}) };
+  if (!VALID_THEMES.has(next.theme)) next.theme = DEFAULT_SETTINGS.theme;
+  const ai = { ...DEFAULT_SETTINGS.ai, ...(next.ai ?? {}) };
+  // Migrate legacy provider IDs (type assertion needed for runtime migration)
+  if ((ai.provider as string) === 'claude') ai.provider = 'anthropic';
+  if ((ai.provider as string) === 'openai-compatible') ai.provider = 'custom';
+  if (!VALID_AI_PROVIDERS.has(ai.provider)) ai.provider = 'off';
+  next.ai = ai;
+  const VALID_GRANULARITY = new Set(['coarse', 'balanced', 'fine']);
+  const VALID_NAME_LANG = new Set(['auto', 'zh', 'en']);
+  const VALID_SCOPE = new Set(['ungrouped', 'all']);
+  const grouping = { ...DEFAULT_SETTINGS.grouping, ...(next.grouping ?? {}) };
+  if (!VALID_GRANULARITY.has(grouping.granularity)) grouping.granularity = DEFAULT_SETTINGS.grouping.granularity;
+  if (!VALID_NAME_LANG.has(grouping.nameLanguage)) grouping.nameLanguage = DEFAULT_SETTINGS.grouping.nameLanguage;
+  if (!VALID_SCOPE.has(grouping.scope)) grouping.scope = DEFAULT_SETTINGS.grouping.scope;
+  if (typeof grouping.minGroupSize !== 'number' || grouping.minGroupSize < 1) {
+    grouping.minGroupSize = DEFAULT_SETTINGS.grouping.minGroupSize;
+  }
+  if (typeof grouping.reuseExisting !== 'boolean') grouping.reuseExisting = DEFAULT_SETTINGS.grouping.reuseExisting;
+  next.grouping = grouping;
+  return next;
+}
+
+export async function loadSettings(): Promise<Settings> {
+  if (hasChromeApi && chrome.storage?.local) {
+    const obj = await chrome.storage.local.get(SETTINGS_KEY);
+    return normalizeSettings(obj[SETTINGS_KEY] || null);
+  }
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    return normalizeSettings(raw ? JSON.parse(raw) : null);
+  } catch {
+    return DEFAULT_SETTINGS;
+  }
+}
+
+export async function saveSettings(s: Settings): Promise<void> {
+  if (hasChromeApi && chrome.storage?.local) {
+    await chrome.storage.local.set({ [SETTINGS_KEY]: s });
+    return;
+  }
+  try {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+  } catch {
+    /* noop */
+  }
+}
+
+// ─── Todos persistence ────────────────────────────────────────────────────
+
+const TODOS_KEY = 'newtab-todos';
+
+export async function loadTodosRaw<T>(fallback: T): Promise<T> {
+  if (hasChromeApi && chrome.storage?.local) {
+    const obj = await chrome.storage.local.get(TODOS_KEY);
+    return obj[TODOS_KEY] ?? fallback;
+  }
+  try {
+    const raw = localStorage.getItem(TODOS_KEY);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+export async function saveTodosRaw<T>(value: T): Promise<void> {
+  if (hasChromeApi && chrome.storage?.local) {
+    await chrome.storage.local.set({ [TODOS_KEY]: value });
+    return;
+  }
+  try {
+    localStorage.setItem(TODOS_KEY, JSON.stringify(value));
+  } catch {
+    /* noop */
+  }
+}
+
+// ─── Favicon URL ──────────────────────────────────────────────────────────
+
+/** Stable cache key per bookmark origin (favicon file path varies by site). */
+export function bookmarkOriginKey(pageUrl: string): string | null {
+  try {
+    const u = new URL(/^https?:\/\//.test(pageUrl) ? pageUrl : `https://${pageUrl}`);
+    return u.origin;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Common locations tried in order — many sites omit /favicon.ico or only ship PNG / apple-touch.
+ */
+export function faviconCandidates(pageUrl: string): string[] {
+  try {
+    const u = new URL(/^https?:\/\//.test(pageUrl) ? pageUrl : `https://${pageUrl}`);
+    const { origin } = u;
+    return [
+      `${origin}/apple-touch-icon.png`,
+      `${origin}/favicon.png`,
+      `${origin}/favicon.ico`,
+    ];
+  } catch {
+    return [];
+  }
+}
+
+/** First candidate only; prefer `faviconCandidates` when loading. */
+export function faviconUrl(pageUrl: string): string | null {
+  const c = faviconCandidates(pageUrl);
+  return c[0] ?? null;
+}
+
+// ─── Navigation ───────────────────────────────────────────────────────────
+
+export function openUrl(url: string, newTab: boolean = true): void {
+  const full = /^[a-z][a-z\d+.-]*:/i.test(url) ? url : `https://${url}`;
+  if (newTab) {
+    window.open(full, '_blank', 'noopener,noreferrer');
+  } else {
+    window.location.href = full;
+  }
+}
+
+export function googleSearchUrl(q: string): string {
+  return `https://www.google.com/search?q=${encodeURIComponent(q)}`;
+}

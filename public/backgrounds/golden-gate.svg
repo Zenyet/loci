@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1200" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="sky" x2="0.8" y2="1"><stop stop-color="#dde9ed"/><stop offset=".48" stop-color="#f8dfc9"/><stop offset="1" stop-color="#eaa887"/></linearGradient>
+    <linearGradient id="far" x2=".9" y2="1"><stop stop-color="#e7b7a0"/><stop offset="1" stop-color="#ca8073"/></linearGradient>
+    <linearGradient id="ridge" x1="0" y1="0" x2="1" y2=".8"><stop stop-color="#da815d"/><stop offset=".6" stop-color="#efae7b"/><stop offset="1" stop-color="#c5725b"/></linearGradient>
+    <linearGradient id="near" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#824e58"/><stop offset=".65" stop-color="#ac635b"/><stop offset="1" stop-color="#d08765"/></linearGradient>
+    <linearGradient id="blue" x2=".8" y2="1"><stop stop-color="#607f91"/><stop offset="1" stop-color="#304c65"/></linearGradient>
+  </defs>
+  <path fill="url(#sky)" d="M0 0h1920v1200H0z"/>
+  <path fill="url(#far)" d="M0 815C300 840 498 548 830 560s461 119 674-25 349-124 416-101v766H0Z"/>
+  <path fill="url(#ridge)" d="M1920 179c-265 10-401 164-510 331-184 280-355 208-578 292C530 916 389 1112 0 1160v40h1920Z"/>
+  <path fill="none" stroke="#ffd9a5" stroke-opacity=".5" stroke-width="2" d="M1920 179c-265 10-401 164-510 331-184 280-355 208-578 292C530 916 389 1112 0 1160"/>
+  <path fill="url(#near)" d="M1920 710c-381-74-557 121-839 231s-451 92-683 259h1522Z"/>
+  <path fill="url(#blue)" d="M0 520c130 43 199 162 270 306s241 227 463 374H0Z"/>
+</svg>

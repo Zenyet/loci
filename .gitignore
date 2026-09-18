@@ -1,0 +1,13 @@
+node_modules
+dist
+dist.zip
+release
+.DS_Store
+.idea/
+*.log
+.vite
+*.tsbuildinfo
+.superpowers/
+.env
+.env.*
+!.env.example
