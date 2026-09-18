@@ -171,7 +171,7 @@ async function loadHistory(): Promise<{
       .slice(0, 20)
       .map((i) => ({
         title: i.title || domainOf(i.url!),
-        url: domainOf(i.url!),
+        url: i.url!,
         at: formatClock(i.lastVisitTime || Date.now()),
         lastVisitTime: i.lastVisitTime || 0,
       }));

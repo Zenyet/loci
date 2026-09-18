@@ -1,10 +1,6 @@
 import { colorCss, colorInk, hexToOklchHue } from '../../services/color';
 import type { GroupColor, GroupColors } from '../../types';
-import type {
-  CSSProperties,
-  ReactNode,
-  WheelEvent as ReactWheelEvent,
-} from "react";
+import type { CSSProperties } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   Bookmark,
@@ -16,6 +12,7 @@ import type {
   ResolvedTheme,
   Settings,
 } from "../../types";
+import { ActivityDock } from "../../components/ActivityDock";
 import { BookmarkDialog } from "../../components/BookmarkDialog";
 import { ContextMenu, type MenuItem } from "../../components/ContextMenu";
 import { Favicon } from "../../components/Favicon";
@@ -1064,54 +1061,13 @@ export function Graph({ data, settings, resolvedTheme, topicsVersion, interactio
         )}
       </div>
 
-      {/* Floating bottom strip — also overlays, so canvas runs full bleed. */}
-      {settings.showStrip && (
-        <div className="desktop-dock" style={styles.bottomStrip}>
-          <BottomStripSection label={copy.constellation.stripTop}>
-            {[...data.bookmarks]
-              .sort((a, b) => b.visits - a.visits)
-              .slice(0, 8)
-              .map((b) => (
-                <button
-                  key={b.id}
-                  style={styles.stripChip}
-                  onClick={() => openUrl(b.url, settings.openInNewTab)}
-                >
-                  <Favicon bookmark={b} size={20} fontSize={9} radius={5} />
-                  <span style={{ fontSize: 12 }}>{b.name}</span>
-                </button>
-              ))}
-          </BottomStripSection>
-          <div style={styles.stripDiv} />
-          <BottomStripSection label={copy.constellation.stripRecent}>
-            {data.recents.slice(0, 8).map((r, i) => (
-              <button
-                key={i}
-                style={styles.stripChip}
-                onClick={() => openUrl(r.url, settings.openInNewTab)}
-              >
-                <span
-                  className="mono"
-                  style={{ fontSize: 10, color: "var(--fg-3)" }}
-                >
-                  {r.at}
-                </span>
-                <span
-                  style={{
-                    fontSize: 12,
-                    maxWidth: 180,
-                    whiteSpace: "nowrap",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                  }}
-                >
-                  {r.title}
-                </span>
-              </button>
-            ))}
-          </BottomStripSection>
-        </div>
-      )}
+      {settings.showStrip && <ActivityDock
+        bookmarks={data.bookmarks}
+        recents={data.recents}
+        openInNewTab={settings.openInNewTab}
+        now={now}
+        blocked={interactionBlocked || searchOpen || groupsOpen || adding || !!editing || !!bmMenu || !!edgeMenu || !!groupMenu || !!canvasMenu}
+      />}
 
       {bmMenu && (
         <ContextMenu
@@ -1245,124 +1201,7 @@ export function Graph({ data, settings, resolvedTheme, topicsVersion, interactio
   );
 }
 
-function BottomStripSection({
-  label,
-  children,
-}: {
-  label: string;
-  children: ReactNode;
-}) {
-  const rowRef = useRef<HTMLDivElement>(null);
-  const [scrollState, setScrollState] = useState({
-    canLeft: false,
-    canRight: false,
-  });
-
-  const updateScrollState = useCallback(() => {
-    const row = rowRef.current;
-    if (!row) return;
-    const maxScrollLeft = Math.max(0, row.scrollWidth - row.clientWidth);
-    const next = {
-      canLeft: row.scrollLeft > 1,
-      canRight: row.scrollLeft < maxScrollLeft - 1,
-    };
-    setScrollState((prev) =>
-      prev.canLeft === next.canLeft && prev.canRight === next.canRight
-        ? prev
-        : next,
-    );
-  }, []);
-
-  useEffect(() => {
-    updateScrollState();
-  });
-
-  useEffect(() => {
-    const row = rowRef.current;
-    if (!row) return;
-    const ro = new ResizeObserver(updateScrollState);
-    ro.observe(row);
-    window.addEventListener("resize", updateScrollState);
-    return () => {
-      ro.disconnect();
-      window.removeEventListener("resize", updateScrollState);
-    };
-  }, [updateScrollState]);
-
-  const scrollByPage = useCallback((dir: -1 | 1) => {
-    const row = rowRef.current;
-    if (!row) return;
-    row.scrollBy({
-      left: dir * Math.max(160, row.clientWidth * 0.72),
-      behavior: "smooth",
-    });
-  }, []);
-
-  const onWheel = useCallback(
-    (e: ReactWheelEvent<HTMLDivElement>) => {
-      const row = rowRef.current;
-      if (!row) return;
-      const maxScrollLeft = Math.max(0, row.scrollWidth - row.clientWidth);
-      if (maxScrollLeft <= 1) return;
-      const delta =
-        Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
-      if (delta === 0) return;
-      const canMove =
-        delta > 0 ? row.scrollLeft < maxScrollLeft - 1 : row.scrollLeft > 1;
-      if (!canMove) return;
-      e.preventDefault();
-      row.scrollLeft += delta;
-      updateScrollState();
-    },
-    [updateScrollState],
-  );
-
-  return (
-    <div
-      className="graph-strip-section"
-      style={styles.stripSection}
-      data-can-left={scrollState.canLeft ? "true" : "false"}
-      data-can-right={scrollState.canRight ? "true" : "false"}
-    >
-      <div className="mono" style={styles.stripLabel}>
-        {label}
-      </div>
-      <button
-        type="button"
-        className="graph-strip-scroll"
-        onClick={() => scrollByPage(-1)}
-        disabled={!scrollState.canLeft}
-        aria-label="向左滚动"
-        title="向左滚动"
-      >
-        <ChevronLeftIcon />
-      </button>
-      <div
-        ref={rowRef}
-        className="strip-row"
-        style={styles.stripRow}
-        onScroll={updateScrollState}
-        onWheel={onWheel}
-      >
-        {children}
-      </div>
-      <button
-        type="button"
-        className="graph-strip-scroll"
-        onClick={() => scrollByPage(1)}
-        disabled={!scrollState.canRight}
-        aria-label="向右滚动"
-        title="向右滚动"
-      >
-        <ChevronRightIcon />
-      </button>
-    </div>
-  );
-}
-
 function ChevronLeftIcon() { return <Icon name="chevron-left" size={14}/>; }
-
-function ChevronRightIcon() { return <Icon name="arrow" size={14}/>; }
 
 function EnterKeyIcon({
   title: tip,
@@ -1427,55 +1266,4 @@ const styles: Record<string, CSSProperties> = {
     overflow: "hidden",
     display: "flex",
   },
-  bottomStrip: {
-    position: "absolute",
-    bottom: 22,
-    left: "50%",
-    transform: "translateX(-50%)",
-    zIndex: 20,
-    display: "flex",
-    alignItems: "stretch",
-    gap: 14,
-    padding: "10px 14px",
-    background: "var(--ui-floating-bg)",
-    border: "1px solid var(--ui-floating-border)",
-    borderRadius: 24,
-    boxShadow: "var(--ui-floating-shadow)",
-    maxWidth: "calc(100vw - 40px)",
-  },
-  stripSection: {
-    display: "flex",
-    alignItems: "center",
-    gap: 12,
-    flex: 1,
-    minWidth: 0,
-  },
-  stripLabel: {
-    fontSize: 10,
-    letterSpacing: "0.15em",
-    color: "var(--fg-3)",
-    flexShrink: 0,
-  },
-  stripRow: {
-    display: "flex",
-    gap: 6,
-    overflowX: "auto",
-    overflowY: "hidden",
-    flex: 1,
-    minWidth: 0,
-    scrollbarWidth: "none",
-  },
-  stripChip: {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: 8,
-    padding: "6px 10px",
-    borderRadius: 14,
-    border: "1px solid transparent",
-    background: "var(--ui-panel-soft)",
-    color: "var(--fg-1)",
-    whiteSpace: "nowrap",
-    flexShrink: 0,
-  },
-  stripDiv: { width: 1, background: "var(--line-soft)" },
 };

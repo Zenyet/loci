@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { DEFAULT_SETTINGS } from '../types';
 import { faviconCandidates } from './chromeApi';
 
@@ -59,5 +59,21 @@ describe('normalizeSettings grouping', () => {
     expect(s.grouping.granularity).toBe('balanced'); // invalid → default
     expect(s.grouping.scope).toBe('all');            // valid override kept
     expect(s.grouping.minGroupSize).toBe(5);
+  });
+});
+
+
+describe('recent history destinations', () => {
+  it('retains the full path, query, and fragment so reopening returns to the visited page', async () => {
+    vi.resetModules();
+    const url = 'https://docs.example.com/guide/colors?lang=zh#rgb';
+    vi.stubGlobal('chrome', {
+      bookmarks: { getTree: async () => [{ children: [{ id: '1', children: [{ id: 'bookmark', title: 'Docs', url }] }] }] },
+      history: { search: async () => [{ title: 'Color guide', url, lastVisitTime: Date.now() }] },
+    });
+    try {
+      const { loadChromeData } = await import('./chromeApi');
+      expect((await loadChromeData()).recents[0]!.url).toBe(url);
+    } finally { vi.unstubAllGlobals(); vi.resetModules(); }
   });
 });

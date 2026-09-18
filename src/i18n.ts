@@ -131,7 +131,7 @@ export const copy = {
     reduceMotion: '减少动效',
     reduceMotionHint: '缩短搜索聚焦与力导向动画',
     showStrip: '显示底栏',
-    showStripHint: '常用与最近访问书签条',
+    showStripHint: '底部的常用与最近访问入口',
     showEdges: '连线',
     showEdgesHint: '在相关站点之间显示连线（同类 / 同域名）。',
     aiProvider: 'AI 分类',

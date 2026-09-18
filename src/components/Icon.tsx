@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 export type IconName =
+  | "history"
   | "look"
   | "wallpaper"
   | "search"
@@ -41,6 +42,7 @@ export function Icon({
   className?: string;
 }) {
   const paths: Record<IconName, ReactNode> = {
+    history: <><path d="M3.5 10a8.5 8.5 0 1 1 1.7 7.5M3.5 4.5V10H9" /><path d="M12 7.5V12l3 2" opacity=".7" /></>,
     more: <g fill="currentColor" stroke="none"><circle cx="5" cy="12" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="19" cy="12" r="1.5" /></g>,
     folder: <>
       <path d="M3.25 8V6.5A2.25 2.25 0 0 1 5.5 4.25h4L12 7h6.5a2.25 2.25 0 0 1 2.25 2.25v8.25a2.25 2.25 0 0 1-2.25 2.25h-13a2.25 2.25 0 0 1-2.25-2.25Z" fill="currentColor" fillOpacity=".15" />
