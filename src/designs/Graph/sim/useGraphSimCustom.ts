@@ -51,7 +51,8 @@ export function useGraphSimCustom({
   useEffect(() => {
     hueOverridesRef.current = hueOverrides;
     for (const n of nodesRef.current) {
-      n.groupHue = hueOverrides?.[n.parentId] ?? folderHue(n.parentId);
+      const hueKey = n.nodeKind === 'group' ? n.groupId ?? n.parentId : n.parentId;
+      n.groupHue = hueOverrides?.[hueKey] ?? folderHue(hueKey);
     }
   }, [hueOverrides]);
 

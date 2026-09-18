@@ -1,3 +1,5 @@
+import { colorCss, colorInk, hexToOklchHue } from '../../services/color';
+import type { GroupColor, GroupColors } from '../../types';
 import type {
   CSSProperties,
   ReactNode,
@@ -114,7 +116,7 @@ export function Graph({ data, settings, resolvedTheme, topicsVersion, interactio
   const [editing, setEditing] = useState<Bookmark | null>(null);
   const [inlineCreating, setInlineCreating] = useState(false);
   const [groupsOpen, setGroupsOpen] = useState(false);
-  const [groupHues, setGroupHues] = useState<Record<string, number>>({});
+  const [groupHues, setGroupHues] = useState<GroupColors>({});
   const [topicMap, setTopicMap] = useState<Map<string, string[]>>(new Map());
   const [scopeGroupId, setScopeGroupId] = useState<string | null>(null);
   // Local-graph focus: when set, the canvas dims everything outside the
@@ -491,17 +493,16 @@ export function Graph({ data, settings, resolvedTheme, topicsVersion, interactio
   // so the inline-create swatch reads as "fresh" the moment it appears.
   const nextHue = useMemo(() => {
     const used = data.groups.map((g) => groupHues[g.id] ?? folderHue(g.id));
-    return pickDistinctHue(used);
+    return pickDistinctHue(used.map(color => typeof color === 'number' ? color : hexToOklchHue(color)).filter((hue): hue is number => hue !== null));
   }, [data.groups, groupHues]);
 
-  const handleCommitCreate = async (name: string) => {
+  const handleCommitCreate = async (name: string, color: GroupColor) => {
     const parentId = scopeGroupId ?? data.barId;
     if (!parentId) return;
     const newId = await createFolder(parentId, name);
-    // If the auto-picked hue differs from the hash-derived default, persist
-    // it so the new group inherits its preselected color.
-    if (newId && Math.round(nextHue) !== folderHue(newId)) {
-      await setGroupHue(newId, nextHue);
+    // Persist the color previewed in the creation form.
+    if (newId && color !== folderHue(newId)) {
+      await setGroupHue(newId, color);
     }
     setInlineCreating(false);
   };
@@ -529,7 +530,7 @@ export function Graph({ data, settings, resolvedTheme, topicsVersion, interactio
       name: g.label,
       url: `newtab://group/${g.id}`,
       group: scopeGroup?.label ?? "首页",
-      color: `oklch(0.56 0.13 ${hue})`,
+      color: colorCss(hue, .56, .13),
       letter: g.label.trim().slice(0, 2) || "组",
       visits: 0,
       last: `${count}`,
@@ -891,10 +892,8 @@ export function Graph({ data, settings, resolvedTheme, topicsVersion, interactio
                           <span
                             className="graph-results-groupmark"
                             style={{
-                              background: `oklch(0.62 0.15 ${
-                                groupHues[hit.group.id] ??
-                                folderHue(hit.group.id)
-                              })`,
+                              background: colorCss(groupHues[hit.group.id] ?? folderHue(hit.group.id), .62, .15),
+                              color: colorInk(groupHues[hit.group.id] ?? folderHue(hit.group.id)),
                             }}
                             aria-hidden
                           >
@@ -1019,7 +1018,8 @@ export function Graph({ data, settings, resolvedTheme, topicsVersion, interactio
             <span
               className="graph-focus-chip__swatch"
               style={{
-                background: `oklch(0.62 0.15 ${groupHues[scopeGroup.id] ?? folderHue(scopeGroup.id)})`,
+                background: colorCss(groupHues[scopeGroup.id] ?? folderHue(scopeGroup.id), .62, .15),
+                color: colorInk(groupHues[scopeGroup.id] ?? folderHue(scopeGroup.id)),
               }}
               aria-hidden
             ><Icon name="folder" size={19} /></span>

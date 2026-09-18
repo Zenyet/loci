@@ -1,3 +1,4 @@
+import type { GroupColors } from '../types';
 import type { CSSProperties } from 'react';
 import { useEffect, useState } from 'react';
 import type { Group } from '../types';
@@ -13,7 +14,7 @@ interface Props {
   initial?: { name: string; url: string; groupId: string };
   groups: Group[];
   looseGroupId?: string | null;
-  hueOverrides?: Record<string, number>;
+  hueOverrides?: GroupColors;
   defaultGroupId?: string;
   onCancel: () => void;
   onSubmit: (values: { name: string; url: string; groupId: string }) => void;

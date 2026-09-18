@@ -1,3 +1,4 @@
+import type { GroupColors } from '../../../types';
 /**
  * Public surface of the graph physics layer.
  *
@@ -28,7 +29,7 @@ export interface SimParams {
   pins: PinsMap;
   /** User-set hue overrides keyed by folder id. Unset folders fall back to
    *  the deterministic hash hue. */
-  hueOverrides?: Record<string, number>;
+  hueOverrides?: GroupColors;
 }
 
 export interface GraphSim {

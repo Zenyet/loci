@@ -1,15 +1,10 @@
 /**
- * Colour-space helpers centred on the OKLCH palette we use everywhere.
- *
- * The UI picks hues in [0, 360) and always renders them at the fixed
- * (L=0.74, C=0.17) point. When we sample a colour from the page via the
- * Eyedropper API we get back sRGB hex — this module converts that hex into
- * the equivalent OKLCH hue so the rest of the UI can keep working in hue
- * degrees without ever leaving the consistent lightness/chroma band.
+ * sRGB picker helpers and compatibility with automatic OKLCH folder hues.
  *
  * Math follows Björn Ottosson's OKLab reference:
  *   https://bottosson.github.io/posts/oklab/
  */
+import type { GroupColor } from '../types';
 
 function srgbChannelToLinear(c: number): number {
   const v = c / 255;
@@ -36,6 +31,7 @@ function linearRgbToOklab(r: number, g: number, b: number): [number, number, num
  */
 export function parseHex(hex: string): [number, number, number] | null {
   const clean = hex.trim().replace(/^#/, '');
+  if (!/^(?:[\da-f]{3}|[\da-f]{6})$/i.test(clean)) return null;
   if (clean.length === 3) {
     const r = parseInt(clean[0]! + clean[0]!, 16);
     const g = parseInt(clean[1]! + clean[1]!, 16);
@@ -71,4 +67,69 @@ export function hexToOklchHue(hex: string): number | null {
   let h = (Math.atan2(bb, a) * 180) / Math.PI;
   if (h < 0) h += 360;
   return h;
+}
+
+const clamp = (value: number, max = 1) => Math.max(0, Math.min(max, value));
+
+export function rgbToHex(rgb: readonly number[]): `#${string}` {
+  return `#${rgb.map(channel => Math.round(clamp(channel, 255)).toString(16).padStart(2, '0')).join('')}`;
+}
+
+export function normalizeHex(value: string): `#${string}` | null {
+  const rgb = parseHex(value);
+  return rgb ? rgbToHex(rgb) : null;
+}
+
+/** Preserve exact custom colors; L/C only style the legacy automatic palette. */
+export function colorCss(color: GroupColor, lightness = .74, chroma = .17): string {
+  return typeof color === 'string' ? color : `oklch(${lightness} ${chroma} ${color})`;
+}
+
+/** Keep folder glyphs readable on very light or dark custom swatches. */
+export function colorInk(color: GroupColor): string {
+  if (typeof color === 'number') return '#fff';
+  const [r, g, b] = (parseHex(color) ?? [0, 0, 0]).map(srgbChannelToLinear) as [number, number, number];
+  return .2126 * r + .7152 * g + .0722 * b > .179 ? '#000' : '#fff';
+}
+
+/** Mix in sRGB for folder shading. Returning hex also works in canvas gradients. */
+export function mixHex(hex: string, target: number, amount: number): `#${string}` {
+  return rgbToHex((parseHex(hex) ?? [0, 0, 0]).map(channel => channel + (target - channel) * clamp(amount)));
+}
+
+export function colorHex(color: GroupColor): `#${string}` {
+  if (typeof color === 'string') return normalizeHex(color) ?? '#000000';
+  const angle = color * Math.PI / 180;
+  const a = .17 * Math.cos(angle), b = .17 * Math.sin(angle);
+  const l = (.74 + .3963377774 * a + .2158037573 * b) ** 3;
+  const m = (.74 - .1055613458 * a - .0638541728 * b) ** 3;
+  const s = (.74 - .0894841775 * a - 1.291485548 * b) ** 3;
+  const linear = [
+    4.0767416621 * l - 3.3077115913 * m + .2309699292 * s,
+    -1.2684380046 * l + 2.6097574011 * m - .3413193965 * s,
+    -.0041960863 * l - .7034186147 * m + 1.707614701 * s,
+  ];
+  return rgbToHex(linear.map(channel => 255 * (channel <= .0031308 ? 12.92 * channel : 1.055 * channel ** (1 / 2.4) - .055)));
+}
+
+export interface HsvColor { h: number; s: number; v: number }
+
+export function hexToHsv(hex: string): HsvColor {
+  const [r, g, b] = (parseHex(hex) ?? [0, 0, 0]).map(channel => channel / 255) as [number, number, number];
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), delta = max - min;
+  let h = 0;
+  if (delta) {
+    if (max === r) h = ((g - b) / delta) % 6;
+    else if (max === g) h = (b - r) / delta + 2;
+    else h = (r - g) / delta + 4;
+  }
+  return { h: (h * 60 + 360) % 360, s: max ? delta / max : 0, v: max };
+}
+
+export function hsvToHex({ h, s, v }: HsvColor): `#${string}` {
+  const hue = ((h % 360) + 360) % 360 / 60;
+  const c = clamp(v) * clamp(s), x = c * (1 - Math.abs(hue % 2 - 1)), m = clamp(v) - c;
+  const channels = hue < 1 ? [c, x, 0] : hue < 2 ? [x, c, 0] : hue < 3 ? [0, c, x]
+    : hue < 4 ? [0, x, c] : hue < 5 ? [x, 0, c] : [c, 0, x];
+  return rgbToHex(channels.map(channel => (channel + m) * 255));
 }

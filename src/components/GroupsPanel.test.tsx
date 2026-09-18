@@ -2,7 +2,7 @@ import { act, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GroupsPanel } from './GroupsPanel';
-import type { Bookmark, Group } from '../types';
+import type { Bookmark, Group, GroupColor } from '../types';
 
 const groups: Group[] = [
   { id: 'work', label: '工作', parentGroupId: null, depth: 0 },
@@ -14,14 +14,14 @@ const bookmarks = [
   { id: 'c', parentId: 'docs' }, { id: 'd', parentId: 'tools' },
 ] as Bookmark[];
 const open = vi.fn(), rename = vi.fn(), remove = vi.fn(), changeHue = vi.fn(), move = vi.fn();
-const commit = vi.fn<(name: string) => Promise<void>>();
+const commit = vi.fn<(name: string, color: GroupColor) => Promise<void>>();
 let root: Root;
 let container: HTMLDivElement;
 function Harness({ create = false }: { create?: boolean }) {
   const [creating, setCreating] = useState(create);
   return <GroupsPanel groups={groups} bookmarks={bookmarks} protectedId="root" hueOverrides={{}} focusedId="tools"
     onOpen={open} onRename={rename} onDelete={remove} onChangeHue={changeHue} onResetHue={vi.fn()} onMove={move}
-    creating={creating} onCreatingChange={setCreating} onCommitCreate={async name => { await commit(name); setCreating(false); }}
+    creating={creating} onCreatingChange={setCreating} onCommitCreate={async (name, color) => { await commit(name, color); setCreating(false); }}
     nextHue={140} createLocation="首页" />;
 }
 async function render(create = false) { await act(async () => root.render(<Harness create={create} />)); }
@@ -102,8 +102,32 @@ describe('Folder manager', () => {
     await render(true);
     await input('新分组名称', '  灵感  ');
     await act(async () => container.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
-    expect(commit).toHaveBeenCalledWith('灵感');
+    expect(commit).toHaveBeenCalledWith('灵感', 140);
     expect(container.querySelector('form')).toBeNull();
+  });
+
+  it('keeps the name while choosing an exact new-folder color and submits that color', async () => {
+    await render(true);
+    await input('新分组名称', '  灵感  ');
+    await clickLabel('选择新分组颜色');
+    await input('HEX 颜色', '#102030');
+    await escape();
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(document.activeElement?.getAttribute('aria-label')).toBe('选择新分组颜色');
+    expect(container.querySelector<HTMLInputElement>('[aria-label="新分组名称"]')!.value).toBe('  灵感  ');
+    expect(container.querySelector('stop[offset=".18"]')?.getAttribute('stop-color')).toBe('#102030');
+    await act(async () => container.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+    expect(commit).toHaveBeenCalledWith('灵感', '#102030');
+  });
+
+  it('sends neutral colors unchanged when recoloring an existing group', async () => {
+    await render();
+    await clickLabel('工具的更多操作');
+    await clickText('更改颜色');
+    await clickLabel('选择颜色 #000000');
+    expect(changeHue).toHaveBeenLastCalledWith('tools', '#000000');
+    await input('HEX 颜色', '#ffffff');
+    expect(changeHue).toHaveBeenLastCalledWith('tools', '#ffffff');
   });
 
   it('keeps the new-folder input and displays an error when creation fails', async () => {

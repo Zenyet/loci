@@ -1,3 +1,4 @@
+import type { GroupColor, GroupColors } from '../../types';
 import type { CSSProperties } from 'react';
 import { useEffect, useLayoutEffect, useRef } from 'react';
 import type { GraphEdge, GraphItem, GraphNode, Group, PinsMap } from '../../types';
@@ -38,9 +39,9 @@ interface Props {
   highlightGroupId: string | null;
   /** Optional explicit node set for the group hull (used for subtree focus). */
   highlightGroupMembers?: Set<string> | null;
-  highlightGroupHue?: number | null;
+  highlightGroupHue?: GroupColor | null;
   /** Optional user-picked hue per folder id; overrides the hash default. */
-  hueOverrides?: Record<string, number>;
+  hueOverrides?: GroupColors;
   /** Shorter dolly animations when the user enables reduce motion. */
   reduceMotion?: boolean;
   /** Rebuilds canvas theme colors when the resolved UI theme changes. */

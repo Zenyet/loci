@@ -112,6 +112,17 @@ function stateWithFavicons(favicons: FaviconCache): RenderState {
 }
 
 describe('drawGraph', () => {
+  it.each(['#000000', '#ffffff', '#102030'] as const)('preserves the selected folder color %s in canvas shading', color => {
+    const ctx = createContext(vi.fn());
+    const stops = vi.fn();
+    ctx.createLinearGradient = vi.fn(() => ({ addColorStop: stops })) as unknown as CanvasRenderingContext2D['createLinearGradient'];
+    const group: GraphNode = { ...node, nodeKind: 'group', groupHue: color };
+    const favicons = { get: () => null } as unknown as FaviconCache;
+    drawGraph(ctx, { ...stateWithFavicons(favicons), nodes: [group], nodeById: new Map([[group.id, group]]) },
+      { scale: 1, tx: 0, ty: 0 }, theme, { width: 800, height: 600, dpr: 1 });
+    expect(stops).toHaveBeenCalledWith(.25, color);
+  });
+
   it.each([0, 24, 12345])('keeps the exact group count of %i in its upper-right badge without hovering', (count) => {
     const favicons = { get: () => readyFavicon(), markBroken: vi.fn() } as unknown as FaviconCache;
     const ctx = createContext(vi.fn());

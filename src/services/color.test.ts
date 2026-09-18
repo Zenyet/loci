@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hexToOklchHue, parseHex } from './color';
+import { colorCss, colorHex, colorInk, hexToHsv, hsvToHex, hexToOklchHue, normalizeHex, parseHex, rgbToHex } from './color';
 
 describe('parseHex', () => {
   it('accepts 6-digit hex', () => {
@@ -15,6 +15,36 @@ describe('parseHex', () => {
     expect(parseHex('not-a-color')).toBeNull();
     expect(parseHex('')).toBeNull();
     expect(parseHex('#zzzzzz')).toBeNull();
+    expect(parseHex('#1z2z3z')).toBeNull();
+  });
+});
+
+describe('full RGB colors', () => {
+  it('normalizes exact colors and preserves black, white, and gray', () => {
+    expect(normalizeHex(' #AbC ')).toBe('#aabbcc');
+    for (const hex of ['#000000', '#ffffff', '#808080', '#123456'] as const) {
+      expect(colorCss(hex)).toBe(hex);
+      expect(colorHex(hex)).toBe(hex);
+      expect(hsvToHex(hexToHsv(hex))).toBe(hex);
+    }
+    expect(colorCss(140)).toBe('oklch(0.74 0.17 140)');
+    expect(colorHex(140)).toMatch(/^#[\da-f]{6}$/);
+    expect(colorInk('#ffffff')).toBe('#000');
+    expect(colorInk('#000000')).toBe('#fff');
+  });
+
+  it('round trips colors throughout the RGB cube without losing channel precision', () => {
+    for (let r = 0; r <= 255; r += 17) for (let g = 0; g <= 255; g += 17) for (let b = 0; b <= 255; b += 17) {
+      const hex = rgbToHex([r, g, b]);
+      expect(hsvToHex(hexToHsv(hex))).toBe(hex);
+    }
+  });
+
+  it('maps the color-plane corners to white, a pure hue, and black', () => {
+    expect(hsvToHex({ h: 120, s: 0, v: 1 })).toBe('#ffffff');
+    expect(hsvToHex({ h: 120, s: 1, v: 1 })).toBe('#00ff00');
+    expect(hsvToHex({ h: 120, s: 1, v: 0 })).toBe('#000000');
+    expect(hsvToHex({ h: 120, s: 0, v: .5 })).toBe('#808080');
   });
 });
 

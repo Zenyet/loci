@@ -1,4 +1,5 @@
-import type { Camera, GraphEdge, GraphNode } from "../../types";
+import { colorCss, mixHex } from '../../services/color';
+import type { Camera, GroupColor, GraphEdge, GraphNode } from "../../types";
 import { FaviconCache } from "./faviconCache";
 import { convexHull, inflateHull, pathSmoothBlob } from "./hull";
 
@@ -19,7 +20,7 @@ export interface RenderState {
   highlightGroupId: string | null;
   /** Optional explicit node set for hulls that include descendant folders. */
   highlightGroupMembers?: Set<string> | null;
-  highlightGroupHue?: number | null;
+  highlightGroupHue?: GroupColor | null;
   /** Local-graph mode: when set, only nodes in this set render at full
    *  opacity and only edges with both endpoints inside it are drawn. */
   focusNeighborhood: Set<string> | null;
@@ -278,8 +279,8 @@ function alphaFor(
   return a;
 }
 
-function hueString(h: number, l = 70, c = 0.17): string {
-  return `oklch(${l / 100} ${c} ${h})`;
+function hueString(h: GroupColor, l = 70, c = 0.17): string {
+  return colorCss(h, l / 100, c);
 }
 
 function nodeAlpha(state: RenderState, id: string): number {
@@ -287,9 +288,9 @@ function nodeAlpha(state: RenderState, id: string): number {
 }
 
 export function hueForNode(
-  n: { id: string; groupHue: number },
+  n: { id: string; groupHue: GroupColor },
   topicHueById: Map<string, number> | null | undefined,
-): number {
+): GroupColor {
   const t = topicHueById?.get(n.id);
   return t == null ? n.groupHue : t;
 }
@@ -460,8 +461,8 @@ function drawNodes(
       ctx.shadowBlur = half * 0.45;
       ctx.shadowOffsetY = half * 0.16;
       const tile = ctx.createLinearGradient(n.x, n.y - half, n.x, n.y + half);
-      tile.addColorStop(0, hueString(hue, isDark ? 42 : 97, 0.025));
-      tile.addColorStop(1, hueString(hue, isDark ? 31 : 89, 0.04));
+      tile.addColorStop(0, typeof hue === 'string' ? mixHex(hue, isDark ? 0 : 255, isDark ? .75 : .93) : hueString(hue, isDark ? 42 : 97, 0.025));
+      tile.addColorStop(1, typeof hue === 'string' ? mixHex(hue, isDark ? 0 : 255, isDark ? .84 : .82) : hueString(hue, isDark ? 31 : 89, 0.04));
       ctx.fillStyle = tile;
       ctx.beginPath();
       ctx.roundRect(
@@ -494,8 +495,9 @@ function drawNodes(
         n.x,
         n.y + half * 0.4,
       );
-      folder.addColorStop(0, hueString(hue, isDark ? 76 : 77, 0.12));
-      folder.addColorStop(1, hueString(hue, isDark ? 63 : 64, 0.16));
+      folder.addColorStop(0, typeof hue === 'string' ? mixHex(hue, 255, .12) : hueString(hue, isDark ? 76 : 77, 0.12));
+      if (typeof hue === 'string') folder.addColorStop(.25, hue);
+      folder.addColorStop(1, typeof hue === 'string' ? mixHex(hue, 0, .1) : hueString(hue, isDark ? 63 : 64, 0.16));
       ctx.fillStyle = folder;
       ctx.beginPath();
       ctx.roundRect(
@@ -519,7 +521,7 @@ function drawNodes(
         ctx.shadowColor = 'rgba(0,0,0,.16)';
         ctx.shadowBlur = 5;
         ctx.shadowOffsetY = 1;
-        ctx.fillStyle = hueString(hue, isDark ? 87 : 37, 0.035);
+        ctx.fillStyle = typeof hue === 'string' ? mixHex(hue, isDark ? 255 : 0, .8) : hueString(hue, isDark ? 87 : 37, 0.035);
         ctx.beginPath();
         ctx.roundRect(badgeX - badgeWidth / 2, badgeY - badgeHeight / 2, badgeWidth, badgeHeight, badgeHeight / 2);
         ctx.fill();

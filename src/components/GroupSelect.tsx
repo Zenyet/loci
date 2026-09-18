@@ -1,3 +1,5 @@
+import { colorCss, colorInk } from '../services/color';
+import type { GroupColor, GroupColors } from '../types';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Group } from '../types';
 import { folderHue } from '../designs/Graph/folderHue';
@@ -8,7 +10,7 @@ interface Props {
   value: string;
   groups: Group[];
   looseGroupId?: string | null;
-  hueOverrides?: Record<string, number>;
+  hueOverrides?: GroupColors;
   onChange: (id: string) => void;
 }
 
@@ -17,7 +19,7 @@ interface Option {
   label: string;
   meta: string;
   depth: number;
-  hue: number | null;
+  hue: GroupColor | null;
   loose: boolean;
 }
 
@@ -215,7 +217,7 @@ function GroupMark({ option }: { option: Option | null }) {
   return (
     <span
       className="group-select__mark"
-      style={{ background: `oklch(0.62 0.15 ${option.hue})` }}
+      style={{ background: colorCss(option.hue, .62, .15), color: colorInk(option.hue) }}
       aria-hidden
     ><Icon name="folder" size={17} /></span>
   );

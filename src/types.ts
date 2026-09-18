@@ -1,5 +1,9 @@
 import { GOLDEN_GATE_BACKGROUND } from "./data/backgrounds";
 
+/** Legacy automatic OKLCH hue, or an exact user-selected sRGB hex color. */
+export type GroupColor = number | `#${string}`;
+export type GroupColors = Record<string, GroupColor>;
+
 export interface Group {
   id: string;
   label: string;
@@ -221,5 +225,5 @@ export interface GraphNode extends GraphItem {
   fx?: number | null;
   fy?: number | null;
   radius: number;
-  groupHue: number;
+  groupHue: GroupColor;
 }

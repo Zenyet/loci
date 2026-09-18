@@ -1,9 +1,10 @@
+import type { GroupColor, GroupColors } from '../types';
 import type { CSSProperties, DragEvent } from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { Bookmark, Group } from '../types';
 import { folderHue } from '../designs/Graph/folderHue';
-import { HuePalette } from './ColorPicker';
+import { ColorPalette } from './ColorPicker';
 import { InlineEdit } from './InlineEdit';
 import { ConfirmDialog } from './ConfirmDialog';
 import { ContextMenu } from './ContextMenu';
@@ -17,17 +18,17 @@ interface Props {
   groups: Group[];
   bookmarks: Bookmark[];
   protectedId: string | null;
-  hueOverrides: Record<string, number>;
+  hueOverrides: GroupColors;
   focusedId: string | null;
   onOpen: (id: string) => void;
   onRename: (id: string, next: string) => void;
   onDelete: (id: string) => void;
-  onChangeHue: (id: string, hue: number) => void;
+  onChangeHue: (id: string, hue: GroupColor) => void;
   onResetHue: (id: string) => void;
   onMove: (id: string, dest: { parentId: string; index: number }) => void;
   creating: boolean;
   onCreatingChange: (next: boolean) => void;
-  onCommitCreate: (name: string) => Promise<void> | void;
+  onCommitCreate: (name: string, color: GroupColor) => Promise<void> | void;
   nextHue: number;
   createLocation: string;
 }
@@ -47,11 +48,20 @@ export function GroupsPanel({
   const [colorGroup, setColorGroup] = useState<Group | null>(null);
   const [menu, setMenu] = useState<{ group: Group; x: number; y: number } | null>(null);
   const [inlineName, setInlineName] = useState('');
+  const [createColor, setCreateColor] = useState<GroupColor | null>(null);
+  const [createColorOpen, setCreateColorOpen] = useState(false);
+  const createColorButton = useRef<HTMLButtonElement>(null);
+  const closeCreateColor = () => {
+    setCreateColorOpen(false);
+    createColorButton.current?.focus();
+  };
   const [saving, setSaving] = useState(false);
   const [createError, setCreateError] = useState('');
   useEffect(() => {
     setInlineName('');
     setCreateError('');
+    setCreateColor(null);
+    setCreateColorOpen(false);
     if (creating) setQuery('');
   }, [creating]);
 
@@ -172,7 +182,7 @@ export function GroupsPanel({
     setSaving(true);
     setCreateError('');
     try {
-      await onCommitCreate(name);
+      await onCommitCreate(name, createColor ?? nextHue);
     } catch {
       setCreateError('未能创建分组，请重试。');
     } finally {
@@ -181,11 +191,12 @@ export function GroupsPanel({
   };
 
   return <div className="groups-browser" onKeyDown={event => {
-    if (event.key === 'Escape' && (colorGroup || pendingDelete)) {
+    if (event.key === 'Escape' && (colorGroup || pendingDelete || createColorOpen)) {
       event.preventDefault();
       event.stopPropagation();
       setColorGroup(null);
       setPendingDelete(null);
+      if (createColorOpen) closeCreateColor();
     }
   }}>
     <div className="groups-browser__toolbar">
@@ -199,13 +210,16 @@ export function GroupsPanel({
           event.preventDefault(); event.stopPropagation(); onCreatingChange(false);
         }
       }}>
-        <FolderIcon hue={nextHue} size={40} />
+        <button ref={createColorButton} type="button" className="groups-create__color" aria-label="选择新分组颜色" aria-haspopup="dialog" aria-expanded={createColorOpen} disabled={saving} onClick={() => setCreateColorOpen(true)}>
+          <FolderIcon hue={createColor ?? nextHue} size={40} />
+          <span className="groups-create__color-badge"><Icon name="look" size={10} /></span>
+        </button>
         <div className="groups-create__field">
-          <TextInput autoFocus aria-label="新分组名称" placeholder="输入分组名称" value={inlineName} onChange={setInlineName} disabled={saving} />
-          <span>{createError || `创建于 ${createLocation}`}</span>
+          <TextInput autoFocus aria-label="新分组名称" aria-describedby="groups-create-hint" placeholder="输入分组名称" value={inlineName} onChange={setInlineName} disabled={saving} />
         </div>
         <button type="submit" className="groups-create__submit" disabled={!inlineName.trim() || saving}>{saving ? '创建中…' : '创建'}</button>
         <button type="button" className="groups-row__more" aria-label="取消新建分组" disabled={saving} onClick={() => onCreatingChange(false)}><Icon name="close" size={16} /></button>
+        <span id="groups-create-hint" className="groups-create__hint" role={createError ? 'alert' : undefined}>{createError || `创建于 ${createLocation} · 点击文件夹可选颜色`}</span>
       </form>}
       {visibleGroups.map(group => {
         const isProtected = group.id === protectedId;
@@ -258,8 +272,12 @@ export function GroupsPanel({
       { label: '删除分组', icon: 'trash', danger: true, separatorBefore: true, onClick: () => setPendingDelete(menu.group) },
     ]} />, document.body)}
     {createPortal(<ConfirmDialog open={!!pendingDelete} title="删除分组" message={pendingDelete ? confirmDeleteMessage(pendingDelete) : ''} danger confirmLabel="删除" onConfirm={() => { if (pendingDelete) onDelete(pendingDelete.id); setPendingDelete(null); }} onCancel={() => setPendingDelete(null)} />, document.body)}
-    {colorGroup && createPortal(<Modal open title={`“${colorGroup.label}”的颜色`} width={330} onClose={() => setColorGroup(null)}>
-      <HuePalette value={hueOverrides[colorGroup.id] ?? folderHue(colorGroup.id)} onChange={hue => onChangeHue(colorGroup.id, hue)} onReset={() => onResetHue(colorGroup.id)} resetLabel="恢复默认" />
+    {creating && createColorOpen && createPortal(<Modal open title="新分组颜色" width={350} onClose={closeCreateColor}>
+      <ColorPalette value={createColor ?? nextHue} onChange={setCreateColor} onReset={() => setCreateColor(null)} />
+      <div className="dialog-actions"><button autoFocus type="button" className="dialog-button dialog-button--primary" onClick={closeCreateColor}>完成</button></div>
+    </Modal>, document.body)}
+    {colorGroup && createPortal(<Modal open title={`“${colorGroup.label}”的颜色`} width={350} onClose={() => setColorGroup(null)}>
+      <ColorPalette value={hueOverrides[colorGroup.id] ?? folderHue(colorGroup.id)} onChange={hue => onChangeHue(colorGroup.id, hue)} onReset={() => onResetHue(colorGroup.id)} resetLabel="恢复默认" />
       <div className="dialog-actions"><button autoFocus type="button" className="dialog-button dialog-button--primary" onClick={() => setColorGroup(null)}>完成</button></div>
     </Modal>, document.body)}
   </div>;

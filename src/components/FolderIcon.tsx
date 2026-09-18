@@ -1,14 +1,19 @@
+import type { GroupColor } from '../types';
+import { mixHex } from '../services/color';
 import { useId } from 'react';
 
-export function FolderIcon({ hue, size = 42 }: { hue: number; size?: number }) {
+export function FolderIcon({ hue, size = 42 }: { hue: GroupColor; size?: number }) {
   const id = useId().replace(/:/g, '');
+  const shade = (lightness: number, chroma: number, amount: number) => typeof hue === 'number'
+    ? `oklch(${lightness} ${chroma} ${hue})`
+    : mixHex(hue, amount > 0 ? 255 : 0, Math.abs(amount));
   return <svg width={size} height={size} viewBox="0 0 48 48" fill="none" aria-hidden="true" focusable="false">
     <defs>
       <linearGradient id={`${id}-back`} x1="24" y1="8" x2="24" y2="37" gradientUnits="userSpaceOnUse">
-        <stop stopColor={`oklch(.78 .11 ${hue})`} /><stop offset="1" stopColor={`oklch(.51 .12 ${hue})`} />
+        <stop stopColor={shade(.78, .11, .08)} /><stop offset="1" stopColor={shade(.51, .12, -.24)} />
       </linearGradient>
       <linearGradient id={`${id}-front`} x1="24" y1="19" x2="24" y2="40" gradientUnits="userSpaceOnUse">
-        <stop stopColor={`oklch(.82 .12 ${hue})`} /><stop offset=".18" stopColor={`oklch(.73 .13 ${hue})`} /><stop offset="1" stopColor={`oklch(.59 .12 ${hue})`} />
+        <stop stopColor={shade(.82, .12, .14)} /><stop offset=".18" stopColor={shade(.73, .13, 0)} /><stop offset="1" stopColor={shade(.59, .12, -.12)} />
       </linearGradient>
       <filter id={`${id}-shadow`} x="-25%" y="-25%" width="150%" height="165%"><feDropShadow dx="0" dy="2" stdDeviation="1.5" floodOpacity=".12" /></filter>
     </defs>

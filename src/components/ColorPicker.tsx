@@ -1,328 +1,149 @@
-import type { CSSProperties, ReactNode } from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState, type PointerEvent } from 'react';
+import type { GroupColor } from '../types';
+import { colorHex, hexToHsv, hsvToHex, normalizeHex, parseHex, rgbToHex, type HsvColor } from '../services/color';
 import { Icon } from './Icon';
-import { hexToOklchHue } from '../services/color';
+import './ColorPicker.css';
 
-// Chromium's EyeDropper API isn't in the stock DOM lib yet. Narrow typing
-// here keeps strict TS happy without polluting global declarations.
-interface EyeDropperResult {
-  sRGBHex: string;
-}
-interface EyeDropperLike {
-  open: () => Promise<EyeDropperResult>;
-}
+interface EyeDropperLike { open: () => Promise<{ sRGBHex: string }> }
 type EyeDropperCtor = { new (): EyeDropperLike };
+const PRESETS = ['#ef6464', '#f4a34f', '#e2c44c', '#62b87c', '#58b9c5', '#6491e8', '#ac7bdd', '#000000', '#808080', '#ffffff'] as const;
 
-function getEyeDropper(): EyeDropperCtor | null {
-  const w = window as unknown as { EyeDropper?: EyeDropperCtor };
-  return typeof w.EyeDropper === 'function' ? w.EyeDropper : null;
-}
-
-/**
- * Hue-based color picker built on oklch(L C H).
- *
- * We only vary the H (hue) channel — L/C are fixed so every picked color lands
- * in the same perceptually-even "saturated mid" band that matches the rest of
- * the UI (group dots, accents, etc.). This keeps the palette cohesive even
- * when users pick whatever hue they like.
- *
- * Two presentations:
- *   - `<HuePalette>`: inline row of preset swatches + a hue slider. Embed
- *     directly where space allows (e.g. Tweaks panel).
- *   - `<HuePickerButton>`: a compact trigger swatch that opens a popover
- *     containing the palette. Use inline in lists (e.g. Groups rows).
- */
-
-const DEFAULT_PRESETS = [
-  0, 15, 30, 45, 60, 75, 90, 105,
-  120, 135, 150, 165, 180, 195, 210, 225,
-  240, 255, 270, 285, 300, 315, 330, 345,
-];
-
-const L = 0.74;
-const C = 0.17;
-
-export function oklchHue(hue: number, alpha = 1): string {
-  return alpha >= 1
-    ? `oklch(${L} ${C} ${hue})`
-    : `oklch(${L} ${C} ${hue} / ${alpha})`;
-}
-
-interface HuePaletteProps {
-  value: number;
-  onChange: (hue: number) => void;
-  presets?: number[];
-  /** Optional reset-to-auto button (e.g. "use default hash hue"). */
+interface Props {
+  value: GroupColor;
+  onChange: (color: GroupColor) => void;
   onReset?: () => void;
   resetLabel?: string;
 }
 
-export function HuePalette({
-  value,
-  onChange,
-  presets = DEFAULT_PRESETS,
-  onReset,
-  resetLabel = '重置',
-}: HuePaletteProps) {
-  const EyeDropperCls = getEyeDropper();
-  const [pickError, setPickError] = useState<string | null>(null);
+/** Full sRGB selection. HSV is only an editing coordinate system; storage is exact RGB. */
+export function ColorPalette({ value, onChange, onReset, resetLabel = '恢复默认' }: Props) {
+  const hex = colorHex(value);
+  const [hsv, setHsv] = useState(() => hexToHsv(hex));
+  const [hexDraft, setHexDraft] = useState(hex.toUpperCase());
+  const [pickError, setPickError] = useState('');
+  const lastEmitted = useRef(hex);
+  const instructionsId = useId();
+  const EyeDropper = (window as unknown as { EyeDropper?: EyeDropperCtor }).EyeDropper;
+  const rgb = parseHex(hex)!;
 
-  const pickFromPage = async () => {
-    if (!EyeDropperCls) return;
-    setPickError(null);
+  useEffect(() => {
+    // Keep the editing hue at black/grey, and avoid quantizing the thumb during a drag.
+    if (hex !== lastEmitted.current) {
+      const next = hexToHsv(hex);
+      setHsv(previous => ({ ...next, h: next.s ? next.h : previous.h }));
+      lastEmitted.current = hex;
+    }
+    setHexDraft(hex.toUpperCase());
+  }, [hex]);
+
+  const chooseHex = (next: `#${string}`) => {
+    const nextHsv = hexToHsv(next);
+    setHsv(previous => ({ ...nextHsv, h: nextHsv.s ? nextHsv.h : previous.h }));
+    setHexDraft(next.toUpperCase());
+    lastEmitted.current = next;
+    onChange(next);
+  };
+  const chooseHsv = (next: HsvColor) => {
+    setHsv(next);
+    const nextHex = hsvToHex(next);
+    lastEmitted.current = nextHex;
+    onChange(nextHex);
+  };
+  const moveInPlane = (event: PointerEvent<HTMLDivElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    chooseHsv({ ...hsv,
+      s: Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)),
+      v: 1 - Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height)),
+    });
+  };
+  const commitHex = () => {
+    const next = normalizeHex(hexDraft);
+    if (next) chooseHex(next);
+  };
+  const pickFromScreen = async () => {
+    if (!EyeDropper) return;
+    setPickError('');
     try {
-      const ed = new EyeDropperCls();
-      const result = await ed.open();
-      const hue = hexToOklchHue(result.sRGBHex);
-      if (hue === null) {
-        setPickError('这个颜色太接近灰色，无法取色');
-        return;
-      }
-      onChange(hue);
-    } catch {
-      /* user cancelled — no-op */
+      const result = await new EyeDropper().open();
+      const next = normalizeHex(result.sRGBHex);
+      if (next) chooseHex(next);
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === 'AbortError')) setPickError('取色失败，请重试。');
     }
   };
 
-  return (
-    <div style={s.palette}>
-      <div style={s.swatchRow}>
-        {presets.map((h) => (
-          <button
-            key={h}
-            type="button"
-            onClick={() => onChange(h)}
-            style={{
-              ...s.swatch,
-              background: oklchHue(h),
-              ...(Math.abs(h - value) < 2 ? s.swatchActive : null),
-            }}
-            aria-label={`hue ${h}`}
-          />
-        ))}
-      </div>
-      <div style={s.sliderRow}>
-        <input
-          type="range"
-          min={0}
-          max={359}
-          step={1}
-          value={Math.round(value)}
-          onChange={(e) => onChange(Number(e.target.value))}
-          style={s.slider}
-        />
-        <span
-          style={{ ...s.preview, background: oklchHue(value) }}
-          aria-hidden
-        />
-        <span className="mono" style={s.hueNum}>
-          {Math.round(value)}°
-        </span>
-      </div>
-      <div style={s.paletteFooter}>
-        {EyeDropperCls && (
-          <button
-            type="button"
-            onClick={pickFromPage}
-            style={s.eyedropperBtn}
-            title="从屏幕取色"
-            aria-label="从屏幕取色"
-          >
-            <EyeDropperIcon />
-            <span>取色</span>
-          </button>
-        )}
-        {onReset && (
-          <button type="button" onClick={onReset} style={s.resetBtn}>
-            {resetLabel}
-          </button>
-        )}
-      </div>
-      {pickError && <span style={s.pickError}>{pickError}</span>}
+  return <div className="color-palette">
+    <div className="color-palette__presets" aria-label="常用颜色">
+      {PRESETS.map(color => <button key={color} type="button" aria-label={`选择颜色 ${color.toUpperCase()}`} aria-pressed={hex === color}
+        style={{ background: color }} onClick={() => chooseHex(color)} />)}
     </div>
-  );
+    <div className="color-palette__plane" role="group" aria-label="饱和度和明度色板" aria-describedby={instructionsId} tabIndex={0}
+      style={{ backgroundColor: hsvToHex({ h: hsv.h, s: 1, v: 1 }) }}
+      onPointerDown={event => {
+        if (event.button !== 0) return;
+        event.preventDefault();
+        event.currentTarget.focus();
+        event.currentTarget.setPointerCapture(event.pointerId);
+        moveInPlane(event);
+      }}
+      onPointerMove={event => { if (event.currentTarget.hasPointerCapture(event.pointerId)) moveInPlane(event); }}
+      onPointerUp={event => {
+        if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
+        moveInPlane(event);
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }}
+      onKeyDown={event => {
+        if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
+        event.preventDefault();
+        const step = event.shiftKey ? .1 : .01;
+        chooseHsv({ ...hsv,
+          s: Math.max(0, Math.min(1, hsv.s + (event.key === 'ArrowRight' ? step : event.key === 'ArrowLeft' ? -step : 0))),
+          v: Math.max(0, Math.min(1, hsv.v + (event.key === 'ArrowUp' ? step : event.key === 'ArrowDown' ? -step : 0))),
+        });
+      }}>
+      <span className="color-palette__thumb" style={{ left: `${hsv.s * 100}%`, top: `${(1 - hsv.v) * 100}%`, background: hex }} />
+    </div>
+    <span id={instructionsId} className="color-palette__sr-only">左右方向键调整饱和度，上下方向键调整明度，按住 Shift 加快调整。也可输入 RGB 数值。</span>
+    <div className="color-palette__hue-row">
+      <span className="color-palette__preview" style={{ background: hex }} aria-hidden="true" />
+      <input className="color-palette__hue" aria-label="色相" type="range" min={0} max={360} step={.1} value={hsv.h}
+        onChange={event => chooseHsv({ ...hsv, h: Number(event.target.value) })} />
+      <span className="color-palette__degrees">{Math.round(hsv.h)}°</span>
+    </div>
+    <div className="color-palette__values">
+      <label className="color-palette__hex">HEX
+        <input aria-label="HEX 颜色" value={hexDraft} spellCheck={false} autoComplete="off" maxLength={7}
+          aria-invalid={!normalizeHex(hexDraft)} onBlur={commitHex}
+          onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); commitHex(); } }}
+          onChange={event => {
+            const draft = event.target.value;
+            setHexDraft(draft);
+            const next = normalizeHex(draft);
+            if (next && draft.replace(/^#/, '').length === 6) chooseHex(next);
+          }} />
+      </label>
+      {(['R', 'G', 'B'] as const).map((channel, index) => <RgbChannel key={channel} label={channel} value={rgb[index]!} onChange={next => {
+        const channels = [...rgb]; channels[index] = next; chooseHex(rgbToHex(channels));
+      }} />)}
+    </div>
+    {!normalizeHex(hexDraft) && <span className="color-palette__error" role="status">请输入 3 位或 6 位 HEX 颜色。</span>}
+    <div className="color-palette__footer">
+      {EyeDropper && <button type="button" className="color-palette__eyedropper" onClick={() => void pickFromScreen()} aria-label="从屏幕取色"><Icon name="eyedropper" size={15} />取色</button>}
+      {onReset && <button type="button" className="color-palette__reset" onClick={onReset}>{resetLabel}</button>}
+    </div>
+    {pickError && <span className="color-palette__error" role="status">{pickError}</span>}
+  </div>;
 }
 
-function EyeDropperIcon() {
-  return <Icon name="eyedropper" size={15} />;
+function RgbChannel({ label, value, onChange }: { label: string; value: number; onChange: (next: number) => void }) {
+  const [draft, setDraft] = useState(String(value));
+  useEffect(() => setDraft(String(value)), [value]);
+  return <label>{label}<input type="text" inputMode="numeric" aria-label={`RGB ${label}`} value={draft} maxLength={3}
+    onBlur={() => setDraft(String(value))} onChange={event => {
+      const next = event.target.value;
+      if (!/^\d{0,3}$/.test(next)) return;
+      setDraft(next);
+      if (next !== '') onChange(Math.min(255, Number(next)));
+    }} /></label>;
 }
-
-interface HuePickerButtonProps {
-  value: number;
-  onChange: (hue: number) => void;
-  onReset?: () => void;
-  presets?: number[];
-  /** Size of the trigger dot. */
-  size?: number;
-  title?: string;
-  children?: ReactNode;
-}
-
-export function HuePickerButton({
-  value,
-  onChange,
-  onReset,
-  presets,
-  size = 14,
-  title = '选择颜色',
-  children,
-}: HuePickerButtonProps) {
-  const [open, setOpen] = useState(false);
-  const wrapRef = useRef<HTMLSpanElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
-    };
-    window.addEventListener('mousedown', onDown);
-    window.addEventListener('keydown', onKey);
-    return () => {
-      window.removeEventListener('mousedown', onDown);
-      window.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
-
-  return (
-    <span ref={wrapRef} style={{ position: 'relative', display: 'inline-flex' }}>
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          setOpen((v) => !v);
-        }}
-        title={title}
-        aria-label={title}
-        style={{
-          ...s.triggerDot,
-          width: size,
-          height: size,
-          background: oklchHue(value),
-          ...(children ? { display: 'grid', placeItems: 'center', borderRadius: 9,
-            border: 0, color: '#fff', boxShadow: 'inset 0 1px 0 #ffffff80, inset 0 0 0 1px #ffffff24, 0 1px 3px #0000000a' } : {}),
-        }}
-      >{children}</button>
-      {open && (
-        <div style={s.popover} onMouseDown={(e) => e.stopPropagation()}>
-          <HuePalette
-            value={value}
-            onChange={onChange}
-            presets={presets}
-            {...(onReset ? { onReset: () => { onReset(); setOpen(false); } } : {})}
-          />
-        </div>
-      )}
-    </span>
-  );
-}
-
-const s: Record<string, CSSProperties> = {
-  palette: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 10,
-    minWidth: 220,
-  },
-  swatchRow: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(8, 1fr)',
-    gap: 6,
-  },
-  swatch: {
-    width: '100%',
-    aspectRatio: '1 / 1',
-    borderRadius: 6,
-    border: '1.5px solid transparent',
-    cursor: 'pointer',
-    padding: 0,
-    transition: 'transform 120ms ease',
-  },
-  swatchActive: {
-    borderColor: 'var(--fg)',
-    transform: 'scale(1.06)',
-  },
-  sliderRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-  },
-  slider: {
-    flex: 1,
-    accentColor: 'var(--accent)',
-    background:
-      'linear-gradient(to right,' +
-      [0, 60, 120, 180, 240, 300, 360]
-        .map((h, i, arr) => `${oklchHue(h)} ${(i / (arr.length - 1)) * 100}%`)
-        .join(',') +
-      ')',
-    height: 8,
-    borderRadius: 999,
-    border: '1px solid var(--line-soft)',
-    appearance: 'none',
-    WebkitAppearance: 'none',
-    padding: 0,
-  },
-  preview: {
-    width: 18,
-    height: 18,
-    borderRadius: '50%',
-    border: '1px solid var(--line)',
-    flexShrink: 0,
-  },
-  hueNum: {
-    fontSize: 10,
-    color: 'var(--fg-3)',
-    minWidth: 30,
-    textAlign: 'right',
-  },
-  paletteFooter: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-  },
-  resetBtn: {
-    fontSize: 11,
-    color: 'var(--fg-3)',
-    padding: '2px 6px',
-    marginLeft: 'auto',
-  },
-  eyedropperBtn: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: 5,
-    fontSize: 11,
-    padding: '4px 8px',
-    borderRadius: 6,
-    color: 'var(--fg-2)',
-    background: 'var(--bg-2)',
-    border: '1px solid var(--line)',
-    cursor: 'pointer',
-  },
-  pickError: {
-    fontSize: 10,
-    color: 'var(--warn)',
-  },
-  triggerDot: {
-    display: 'inline-block',
-    borderRadius: '50%',
-    border: '1.5px solid color-mix(in oklab, var(--fg) 22%, transparent)',
-    cursor: 'pointer',
-    padding: 0,
-  },
-  popover: {
-    position: 'absolute',
-    zIndex: 200,
-    top: 'calc(100% + 8px)',
-    left: 0,
-    padding: 12,
-    background: 'var(--glass-menu)',
-    border: '1px solid var(--glass-edge)',
-    borderRadius: 18,
-    backdropFilter: 'blur(30px) saturate(145%)',
-    boxShadow: 'var(--glass-shadow)',
-    minWidth: 240,
-  },
-};
