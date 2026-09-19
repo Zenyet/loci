@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { useEffect, useId } from 'react';
-import { CloseIcon } from './CloseIcon';
+import { CloseButton } from './CloseButton';
 import './Modal.css';
 
 interface Props {
@@ -37,9 +37,7 @@ export function Modal({ open, onClose, title, children, width = 420, allowOverfl
       >
         <div className="modal-head">
           <span id={titleId} className="modal-title">{title}</span>
-          <button type="button" onClick={onClose} className="modal-close" aria-label="关闭">
-            <CloseIcon />
-          </button>
+          <CloseButton onClick={onClose} />
         </div>
         <div className="modal-body">{children}</div>
       </div>

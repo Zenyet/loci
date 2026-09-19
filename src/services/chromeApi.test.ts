@@ -1,6 +1,26 @@
 import { describe, it, expect, vi } from 'vitest';
 import { DEFAULT_SETTINGS } from '../types';
 import { faviconCandidates } from './chromeApi';
+import { flattenBookmarks } from './chromeApi';
+import { selectScopedBookmarks, toProposal } from './grouping/plan';
+
+describe('all bookmark sources', () => {
+  it('keeps secondary roots navigable and inherits managed-folder protection', () => {
+    const flat = flattenBookmarks([{ id: '0', title: '', children: [
+      { id: '100', folderType: 'bookmarks-bar', title: '书签栏', children: [{ id: 'a', title: 'A', url: 'https://a.test' }] },
+      { id: '2', title: '其他书签', children: [{ id: 'b', title: 'B', url: 'https://b.test' }] },
+      { id: '3', title: '移动设备书签', children: [{ id: 'folder', title: 'Mobile', children: [{ id: 'c', title: 'C', url: 'https://c.test' }] }] },
+      { id: '4', title: '组织', unmodifiable: 'managed', children: [{ id: 'managed-folder', title: 'Managed', children: [{ id: 'd', title: 'D', url: 'https://d.test' }] }] },
+    ] }] as unknown as chrome.bookmarks.BookmarkTreeNode[]);
+    expect(flat.barId).toBe('100');
+    expect(flat.bookmarks).toHaveLength(4);
+    expect(flat.groups.find(group => group.id === '2')).toMatchObject({ isRoot: true, parentGroupId: null });
+    expect(flat.groups.find(group => group.id === 'folder')).toMatchObject({ parentGroupId: '3', rootId: '3' });
+    expect(flat.bookmarks.find(bookmark => bookmark.id === 'd')).toMatchObject({ readOnly: true, rootId: '4' });
+    expect(selectScopedBookmarks({ ...flat, recents: [], source: 'chrome' }, 'all').map(bookmark => bookmark.id)).toEqual(['a', 'b', 'c']);
+    expect(toProposal({ groups: [{ name: '组织', memberIds: ['a'] }, { name: 'Managed', memberIds: ['b'] }], unassigned: [] }, ['a', 'b'], flat.groups, true).groups.every(group => !group.existingFolderId)).toBe(true);
+  });
+});
 
 describe('DEFAULT_SETTINGS.showEdges', () => {
   it('defaults edge drawing to on', () => {

@@ -3,6 +3,7 @@ import type { Bookmark, HistoryItem } from '../types';
 import { Favicon } from './Favicon';
 import { Icon } from './Icon';
 import './ActivityDock.css';
+import { useSurfaceDismiss } from '../hooks/useSurfaceDismiss';
 
 interface Props {
   bookmarks: Bookmark[];
@@ -55,6 +56,7 @@ function historyFavicon(item: HistoryItem, bookmarks: Bookmark[]): Pick<Bookmark
 
 export function ActivityDock({ bookmarks, recents, openInNewTab, now, blocked = false }: Props) {
   const [view, setView] = useState<ActivityView | null>(null);
+  useSurfaceDismiss('activity', !!view, () => setView(null));
   const [query, setQuery] = useState('');
   const [searching, setSearching] = useState(false);
   const rootRef = useRef<HTMLElement>(null);

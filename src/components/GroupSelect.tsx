@@ -50,7 +50,7 @@ export function GroupSelect({
         loose: true,
       });
     }
-    for (const g of groups) {
+    for (const g of groups.filter(group => !group.readOnly)) {
       const parentLabel = g.parentGroupId
         ? byId.get(g.parentGroupId)?.label ?? '子分组'
         : '顶层分组';

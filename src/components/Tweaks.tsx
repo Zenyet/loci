@@ -24,11 +24,14 @@ import type { GroupingWorkflow } from "../hooks/useGrouping";
 import { Icon } from "./Icon";
 import { PreferenceIcon } from "./PreferenceIcon";
 import { SearchProviderLogo } from "./SearchProviderLogo";
+import { WidgetSettings } from './widgets/WidgetSettings';
+import { useSurfaceDismiss } from '../hooks/useSurfaceDismiss';
 import { TextInput } from "./TextInput";
 import { Slider } from "./Slider";
 import "./Tweaks.css";
 
 interface Props {
+  requestedSection?: { section: 'widgets' | 'ai'; revision: number };
   settings: Settings;
   onChange: (patch: Partial<Settings>) => void;
   open: boolean;
@@ -40,7 +43,7 @@ interface Props {
   groupingFlow?: GroupingWorkflow;
 }
 
-type Section = "look" | "wallpaper" | "search" | "behavior" | "ai";
+type Section = "look" | "wallpaper" | "search" | "behavior" | "ai" | "widgets";
 
 const SECTIONS: {
   id: Section;
@@ -67,6 +70,7 @@ const SECTIONS: {
     title: "通用",
     keywords: "行为 动效 连线 底栏 新标签页 打开方式",
   },
+  { id: "widgets", title: "小组件", keywords: "天气 城市 时间 时钟 日期 待办 小组件" },
   {
     id: "ai",
     title: "智能整理",
@@ -149,6 +153,7 @@ function DesktopPreview({
 }
 
 export function Tweaks({
+  requestedSection,
   settings,
   onChange,
   open,
@@ -164,6 +169,8 @@ export function Tweaks({
   const closeRef = useRef(onToggle);
   closeRef.current = onToggle;
   const [section, setSection] = useState<Section>("look");
+  useSurfaceDismiss('settings', open, () => {});
+  useEffect(() => { if (requestedSection) setSection(requestedSection.section); }, [requestedSection]);
   const [query, setQuery] = useState("");
   const [urlDraft, setUrlDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -847,6 +854,7 @@ export function Tweaks({
                     </SettingGroup>
                   </>
                 )}
+                {section === "widgets" && <WidgetSettings value={settings.widgets} onChange={widgets => onChange({ widgets })} />}
                 {section === "ai" && (
                   <AiOrganizer settings={settings} onChange={onChange} data={data}
                     flow={groupingFlow} aiReady={aiReady} onClassify={onClassify} classifying={classifying} />

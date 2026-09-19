@@ -2,12 +2,15 @@ import { useState } from 'react';
 import { useChromeData } from './hooks/useChromeData';
 import { useSettings } from './hooks/useSettings';
 import { Tweaks } from './components/Tweaks';
+import { WidgetDashboard } from './components/widgets/WidgetDashboard';
 import { Graph } from './designs/Graph/Graph';
 import { copy } from './i18n';
 import { makeClassifier } from './services/ai';
 import { loadTopicCache, saveTopicCache, sitesNeedingClassify, cacheKey } from './services/topicCache';
 import { hostOf } from './designs/Graph/relationSuggest';
 import { useGrouping } from './hooks/useGrouping';
+import { useInbox } from './hooks/useInbox';
+import { InboxPanel } from './components/InboxPanel';
 import './styles/tokens.css';
 import './styles/shell.css';
 
@@ -15,6 +18,9 @@ export default function App() {
   const { settings, resolvedTheme, update, ready } = useSettings();
   const { data, loading, error, refresh } = useChromeData();
   const [tweaksOpen, setTweaksOpen] = useState(false);
+  const [widgetPanelOpen, setWidgetPanelOpen] = useState(false);
+  const [inboxOpen, setInboxOpen] = useState(() => new URLSearchParams(window.location.search).get('view') === 'inbox');
+  const [requestedSection, setRequestedSection] = useState<{ section: 'widgets' | 'ai'; revision: number }>();
   const [classifying, setClassifying] = useState(false);
   const [topicsVersion, setTopicsVersion] = useState(0);
 
@@ -42,7 +48,8 @@ export default function App() {
     }
   };
 
-  const groupingFlow = useGrouping(data, settings, refresh);
+  const inbox = useInbox(data);
+  const groupingFlow = useGrouping(data, settings, refresh, inbox.folder?.id ?? null);
 
   const aiReady =
     settings.ai.provider !== 'off' &&
@@ -58,61 +65,34 @@ export default function App() {
     );
   }
 
-  if (!data) {
-    return (
-      <div className="shell">
-        <ExtensionState
-          title="无法读取 Chrome 书签"
-          body={error ?? '扩展数据尚未准备好。请刷新新标签页，或确认扩展权限仍然开启。'}
-          actionLabel="重试"
-          onAction={refresh}
-        />
-      </div>
-    );
-  }
-
-  const emptyChrome =
-    data.source === 'chrome' && data.bookmarks.length === 0 && data.groups.length === 0;
-  if (emptyChrome) {
-    return (
-      <div className="shell">
-        <ExtensionState
-          title="还没有可显示的书签"
-          body="在 Chrome 书签栏添加书签或文件夹后，它们会自动出现在这张图里。"
-          actionLabel="重新读取"
-          onAction={refresh}
-        />
-        <Tweaks
-          settings={settings}
-          onChange={update}
-          open={tweaksOpen}
-          onToggle={() => setTweaksOpen((v) => !v)}
-          onClassify={runClassify}
-          classifying={classifying}
-          aiReady={aiReady}
-          data={data}
-          groupingFlow={groupingFlow}
-        />
-      </div>
-    );
-  }
-
   return (
     <div className="shell">
-      <div className="stage" ref={element => { if (element) element.inert = tweaksOpen; }}>
-        <Graph data={data} settings={settings} resolvedTheme={resolvedTheme} topicsVersion={topicsVersion} interactionBlocked={tweaksOpen} />
+      <div className="stage" ref={element => { if (element) element.inert = tweaksOpen || inboxOpen; }}>
+        {data ? <Graph data={data} settings={settings} resolvedTheme={resolvedTheme} topicsVersion={topicsVersion} interactionBlocked={tweaksOpen || widgetPanelOpen || inboxOpen}
+          inboxCount={inbox.bookmarks.length} onOpenInbox={() => setInboxOpen(true)} />
+          : <ExtensionState title="无法读取 Chrome 书签" body={error ?? '请刷新新标签页，或确认扩展权限仍然开启。'} actionLabel="重试" onAction={refresh} />}
       </div>
+      <WidgetDashboard settings={settings.widgets} onChange={widgets => update({ widgets })}
+        blocked={tweaksOpen || inboxOpen} onPanelChange={setWidgetPanelOpen}
+        onConfigure={() => { setRequestedSection({ section: 'widgets', revision: Date.now() }); setTweaksOpen(true); }} />
       <Tweaks
         settings={settings}
         onChange={update}
         open={tweaksOpen}
+        requestedSection={requestedSection}
         onToggle={() => setTweaksOpen((v) => !v)}
         onClassify={runClassify}
         classifying={classifying}
         aiReady={aiReady}
-        data={data}
+        data={data ?? undefined}
         groupingFlow={groupingFlow}
       />
+      {data && <InboxPanel open={inboxOpen} data={data} folder={inbox.folder} bookmarks={inbox.bookmarks}
+        ready={inbox.ready} error={inbox.error} settings={settings} organizing={['generating', 'applying', 'undoing'].includes(groupingFlow.stage)}
+        onClose={() => setInboxOpen(false)} onRefresh={refresh} onOrganize={selection => {
+          if (!groupingFlow.select?.(selection)) return;
+          setInboxOpen(false); setRequestedSection({ section: 'ai', revision: Date.now() }); setTweaksOpen(true);
+        }} />}
     </div>
   );
 }

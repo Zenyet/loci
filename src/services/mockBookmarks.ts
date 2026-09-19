@@ -42,6 +42,7 @@ const STORAGE_KEY = 'newtab-mock-bookmarks';
 const listeners = new Set<() => void>();
 
 let state: MockState | null = null;
+let storedRaw: string | null = null;
 
 function seedState(): MockState {
   const nodes: MockNode[] = [];
@@ -56,13 +57,14 @@ function seedState(): MockState {
 }
 
 function load(): MockState {
-  if (state) return state;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
+    if (state && raw === storedRaw) return state;
     if (raw) {
       const parsed = JSON.parse(raw) as MockState;
       if (parsed && Array.isArray(parsed.nodes)) {
         state = parsed;
+        storedRaw = raw;
         return state;
       }
     }
@@ -77,7 +79,8 @@ function load(): MockState {
 function persist() {
   if (!state) return;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    storedRaw = JSON.stringify(state);
+    localStorage.setItem(STORAGE_KEY, storedRaw);
   } catch {
     /* quota? ignore */
   }
@@ -286,8 +289,13 @@ export function mockRemoveTree(id: string): void {
 
 export function mockSubscribe(cb: () => void): () => void {
   listeners.add(cb);
+  const changed = (event: StorageEvent) => {
+    if (event.key === STORAGE_KEY || event.key === null) { state = null; cb(); }
+  };
+  window.addEventListener('storage', changed);
   return () => {
     listeners.delete(cb);
+    window.removeEventListener('storage', changed);
   };
 }
 

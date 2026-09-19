@@ -14,6 +14,7 @@ import type {
 } from "../../types";
 import { ActivityDock } from "../../components/ActivityDock";
 import { BookmarkDialog } from "../../components/BookmarkDialog";
+import { CloseButton } from "../../components/CloseButton";
 import { ContextMenu, type MenuItem } from "../../components/ContextMenu";
 import { Favicon } from "../../components/Favicon";
 import { GroupsPanel } from "../../components/GroupsPanel";
@@ -42,6 +43,8 @@ import {
 import { copy } from "../../i18n";
 import { Icon } from "../../components/Icon";
 import { SearchProviderLogo } from "../../components/SearchProviderLogo";
+import { bookmarkSearchScore } from "../../services/bookmarkSearch";
+import { useSurfaceDismiss } from "../../hooks/useSurfaceDismiss";
 import { useClock } from "../../hooks/useClock";
 import "./graph-hud.css";
 import { folderHue, pickDistinctHue } from "./folderHue";
@@ -64,6 +67,7 @@ import { countGroupBookmarks } from "./groupMetrics";
 import { topicHueById as computeTopicHueById } from "./topicHue";
 import { topicNeighborhood } from "./topicNeighborhood";
 import { isPlainLetterKey, isSearchShortcutKey } from "./keyboardShortcuts";
+import { Select } from '../../components/Select';
 
 interface Props {
   data: ChromeData;
@@ -71,9 +75,11 @@ interface Props {
   resolvedTheme: ResolvedTheme;
   topicsVersion?: number;
   interactionBlocked?: boolean;
+  inboxCount?: number;
+  onOpenInbox?: () => void;
 }
 
-type SearchHit =
+type SearchHit = (
   | {
       kind: "bookmark";
       id: string;
@@ -93,7 +99,7 @@ type SearchHit =
       visits: number;
       group: Group;
       previewScopeId: string | null;
-    };
+    }) & { score: number };
 
 const groupNodeId = (id: string) => `group:${id}`;
 
@@ -103,7 +109,7 @@ const isTextEntryElement = (el: HTMLElement | null): boolean => {
   return ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName);
 };
 
-export function Graph({ data, settings, resolvedTheme, topicsVersion, interactionBlocked = false }: Props) {
+export function Graph({ data, settings, resolvedTheme, topicsVersion, interactionBlocked = false, inboxCount = 0, onOpenInbox }: Props) {
   const now = useClock();
   const [edges, setEdges] = useState<GraphEdge[]>([]);
   const [pins, setPins] = useState<PinsMap>({});
@@ -116,6 +122,7 @@ export function Graph({ data, settings, resolvedTheme, topicsVersion, interactio
   const [groupHues, setGroupHues] = useState<GroupColors>({});
   const [topicMap, setTopicMap] = useState<Map<string, string[]>>(new Map());
   const [scopeGroupId, setScopeGroupId] = useState<string | null>(null);
+  const [sourceId, setSourceId] = useState('all');
   // Local-graph focus: when set, the canvas dims everything outside the
   // node's BFS neighborhood (depth 1 over manual edges). Entered via the
   // bookmark right-click menu or Alt+click; exited via ESC, the chip ×,
@@ -141,6 +148,14 @@ export function Graph({ data, settings, resolvedTheme, topicsVersion, interactio
     null,
   );
   const filterRef = useRef<HTMLInputElement>(null);
+  useSurfaceDismiss('graph', searchOpen || groupsOpen || adding || !!editing || !!bmMenu || !!edgeMenu || !!groupMenu || !!canvasMenu, () => {
+    setSearchOpen(false); setFilter(''); setGroupsOpen(false); setInlineCreating(false);
+    setAdding(false); setEditing(null); setBmMenu(null); setEdgeMenu(null); setGroupMenu(null); setCanvasMenu(null);
+  });
+  useEffect(() => {
+    if (sourceId !== 'all' && !(data.roots ?? []).some(root => root.id === sourceId)) setSourceId('all');
+  }, [data.roots, sourceId]);
+
 
   const openSearch = useCallback(() => {
     setSearchOpen(true);
@@ -276,7 +291,7 @@ export function Graph({ data, settings, resolvedTheme, topicsVersion, interactio
     const onKey = (e: KeyboardEvent) => {
       if (interactionBlocked || e.defaultPrevented) return;
       const active = document.activeElement as HTMLElement | null;
-      if (active?.closest(".settings-window")) return;
+      if (active?.closest(".settings-window, .widget-shell")) return;
       const typing = isTextEntryElement(active);
       if (e.key === "Escape") {
         if (searchOpen || filter.length > 0) {
@@ -377,6 +392,7 @@ export function Graph({ data, settings, resolvedTheme, topicsVersion, interactio
       { label: "在新标签页打开", icon: "external", onClick: () => openUrl(bm.url) },
       {
         label: copy.workspace.editBookmarkTitle + "…",
+        disabled: bm.readOnly,
         icon: "edit",
         onClick: () => setEditing(bm),
       },
@@ -395,6 +411,7 @@ export function Graph({ data, settings, resolvedTheme, topicsVersion, interactio
       },
       {
         label: copy.workspace.deleteBookmark,
+        disabled: bm.readOnly,
         icon: "trash",
         separatorBefore: true,
         danger: true,
@@ -417,6 +434,7 @@ export function Graph({ data, settings, resolvedTheme, topicsVersion, interactio
       },
       {
         label: copy.workspace.addBookmark,
+        disabled: g.readOnly,
         icon: "bookmark",
         separatorBefore: true,
         onClick: () => {
@@ -426,6 +444,7 @@ export function Graph({ data, settings, resolvedTheme, topicsVersion, interactio
       },
       {
         label: copy.workspace.newFolder,
+        disabled: g.readOnly,
         icon: "plus",
         onClick: () => {
           setScopeGroupId(id);
@@ -460,18 +479,22 @@ export function Graph({ data, settings, resolvedTheme, topicsVersion, interactio
     ];
   };
 
+  const defaultParentId = scopeGroupId ?? (sourceId !== 'all' ? sourceId : data.barId);
+  const writableParent = !!defaultParentId && !data.groups.find(group => group.id === defaultParentId)?.readOnly
+    && !data.roots?.find(root => root.id === defaultParentId)?.readOnly;
   const buildCanvasMenu = (): MenuItem[] => {
-    const parentId = scopeGroupId ?? data.barId;
+    const parentId = defaultParentId;
     return [
       {
         label: copy.workspace.addBookmark,
         icon: "bookmark",
+        disabled: !writableParent,
         onClick: () => setAdding(true),
       },
       {
         label: copy.workspace.newFolder,
         icon: "plus",
-        disabled: !parentId,
+        disabled: !parentId || !writableParent,
         onClick: () => {
           setGroupsOpen(true);
           setInlineCreating(true);
@@ -494,8 +517,8 @@ export function Graph({ data, settings, resolvedTheme, topicsVersion, interactio
   }, [data.groups, groupHues]);
 
   const handleCommitCreate = async (name: string, color: GroupColor) => {
-    const parentId = scopeGroupId ?? data.barId;
-    if (!parentId) return;
+    const parentId = defaultParentId;
+    if (!parentId || !writableParent) return;
     const newId = await createFolder(parentId, name);
     // Persist the color previewed in the creation form.
     if (newId && color !== folderHue(newId)) {
@@ -539,10 +562,11 @@ export function Graph({ data, settings, resolvedTheme, topicsVersion, interactio
     const hits: SearchHit[] = [];
     for (const g of data.groups) {
       if (g.id === data.barId) continue;
-      const hay = `${g.label}`.toLowerCase();
-      if (hay.includes(filterQuery)) {
+      if (sourceId !== 'all' && (g.rootId ?? data.barId) !== sourceId) continue;
+      const score = bookmarkSearchScore(filterQuery, g.label);
+      if (score !== null) {
         hits.push({
-          kind: "group",
+          kind: "group", score,
           id: groupNodeId(g.id),
           nodeId: groupNodeId(g.id),
           name: g.label,
@@ -554,10 +578,11 @@ export function Graph({ data, settings, resolvedTheme, topicsVersion, interactio
       }
     }
     for (const b of data.bookmarks) {
-      const hay = `${b.name} ${b.url} ${b.group}`.toLowerCase();
-      if (hay.includes(filterQuery)) {
+      if (sourceId !== 'all' && (b.rootId ?? data.barId) !== sourceId) continue;
+      const score = bookmarkSearchScore(filterQuery, b.name, `${b.url} ${b.group}`);
+      if (score !== null) {
         hits.push({
-          kind: "bookmark",
+          kind: "bookmark", score,
           id: b.id,
           nodeId: b.id,
           name: b.name,
@@ -569,18 +594,16 @@ export function Graph({ data, settings, resolvedTheme, topicsVersion, interactio
       }
     }
     return hits.sort((a, b) => {
-      if (a.kind !== b.kind) return a.kind === "group" ? -1 : 1;
-      return b.visits - a.visits;
+      return b.score - a.score || b.visits - a.visits || a.name.localeCompare(b.name);
     });
-  }, [filterQuery, data.groups, data.bookmarks, data.barId, groupBookmarkCounts]);
+  }, [filterQuery, sourceId, data.groups, data.bookmarks, data.barId, groupBookmarkCounts]);
 
-  const MAX_RESULTS = 8;
-  const visibleMatches = searchHits.slice(0, MAX_RESULTS);
+  const visibleMatches = searchHits;
 
   const [selectedIdx, setSelectedIdx] = useState(0);
   useEffect(() => {
     setSelectedIdx(0);
-  }, [filterQuery]);
+  }, [filterQuery, sourceId]);
 
   const selectedHit =
     visibleMatches.length > 0
@@ -594,13 +617,14 @@ export function Graph({ data, settings, resolvedTheme, topicsVersion, interactio
   const visibleGraphItems = useMemo<GraphItem[]>(() => {
     const childGroups = data.groups
       .filter(
-        (g) => g.id !== data.barId && g.parentGroupId === effectiveScopeGroupId,
+        (g) => g.id !== data.barId && g.parentGroupId === effectiveScopeGroupId
+          && (sourceId === 'all' || (g.rootId ?? data.barId) === sourceId),
       )
       .map(toGroupNode);
     const parentId = effectiveScopeGroupId ?? data.barId;
     const looseBookmarks = parentId
       ? data.bookmarks
-          .filter((b) => b.parentId === parentId)
+          .filter((b) => b.parentId === parentId && (sourceId === 'all' || (b.rootId ?? data.barId) === sourceId))
           .map((b) => ({
             ...b,
             nodeKind: "bookmark" as const,
@@ -613,6 +637,7 @@ export function Graph({ data, settings, resolvedTheme, topicsVersion, interactio
     data.bookmarks,
     data.barId,
     effectiveScopeGroupId,
+    sourceId,
     groupHues,
     groupBookmarkCounts,
     topicMap,
@@ -737,15 +762,15 @@ export function Graph({ data, settings, resolvedTheme, topicsVersion, interactio
 
   return (
     <div style={styles.root} className="graph-desktop">
-      <header className="desktop-header">
-        <div className="desktop-date">
-          {now.toLocaleDateString("zh-CN", {
-            month: "long",
-            day: "numeric",
-            weekday: "long",
-          })}
-        </div>
-      </header>
+      <div className="graph-quick-actions" aria-label="书签操作">
+        {!!data.roots?.length && <Select label="书签来源" className="graph-source-select" value={sourceId}
+          options={[{ value: 'all', label: '全部书签' }, ...data.roots.map(root => ({ value: root.id, label: root.label, description: root.readOnly ? '只读来源' : undefined }))]}
+          onChange={value => { setSourceId(value); setScopeGroupId(null); setFocusedNodeId(null); }} />}
+        <button type="button" disabled={!writableParent} onClick={() => setAdding(true)}><Icon name="plus" size={14} />添加</button>
+        <button type="button" onClick={() => setGroupsOpen(true)}><Icon name="folder" size={14} />管理</button>
+        {onOpenInbox && <button type="button" className="inbox-entry" onClick={onOpenInbox}><Icon name="inbox" size={14} />收件箱<small>{inboxCount}</small></button>}
+      </div>
+      {!data.bookmarks.length && !data.groups.length && <div className="graph-empty-hint">从一个收藏开始，点击左下角「添加」。</div>}
       <GraphCanvas
         interactionBlocked={interactionBlocked || searchOpen || groupsOpen || adding || !!editing || !!bmMenu || !!edgeMenu || !!groupMenu || !!canvasMenu}
         bookmarks={visibleGraphItems}
@@ -1107,7 +1132,7 @@ export function Graph({ data, settings, resolvedTheme, topicsVersion, interactio
         groups={data.groups}
         looseGroupId={data.barId}
         hueOverrides={groupHues}
-        defaultGroupId={scopeGroupId ?? data.barId ?? data.groups[0]?.id}
+        defaultGroupId={defaultParentId ?? undefined}
         onCancel={() => setAdding(false)}
         onSubmit={async ({ name, url, groupId }) => {
           setAdding(false);
@@ -1163,12 +1188,10 @@ export function Graph({ data, settings, resolvedTheme, topicsVersion, interactio
               <button
                 type="button"
                 className="graph-groups-panel__new"
-                disabled={!data.barId || inlineCreating}
+                disabled={!writableParent || inlineCreating}
                 onClick={() => setInlineCreating(true)}
               ><Icon name="plus" size={16} />新建分组</button>
-              <button type="button" onClick={closeGroupsDialog} className="graph-groups-panel__collapse" aria-label="关闭分组管理" title="关闭">
-                <ClearSearchIcon />
-              </button>
+              <CloseButton onClick={closeGroupsDialog} className="graph-groups-panel__collapse" label="关闭分组管理" />
             </div>
             <div className="graph-groups-panel__body">
               <GroupsPanel

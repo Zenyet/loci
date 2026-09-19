@@ -284,12 +284,9 @@ export function GraphCanvas(props: Props) {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const theme: Theme = {
-      fg: getComputedStyle(document.body).getPropertyValue('--fg') || '#fff',
-      fgMuted: getComputedStyle(document.body).getPropertyValue('--fg-3') || '#888',
-      bg: getComputedStyle(document.body).getPropertyValue('--bg') || '#111',
-      line: getComputedStyle(document.body).getPropertyValue('--line') || '#333',
-    };
+    // Read on the first paint, after the parent's settings effect has applied
+    // the new CSS theme. Child effects run before parent effects.
+    let theme: Theme | null = null;
 
     let raf: number | null = null;
     let running = true;
@@ -372,6 +369,15 @@ export function GraphCanvas(props: Props) {
         hoverAnimating;
 
       if (active) {
+        if (!theme) {
+          const style = getComputedStyle(document.body);
+          theme = {
+            fg: style.getPropertyValue('--fg') || '#fff',
+            fgMuted: style.getPropertyValue('--fg-3') || '#888',
+            bg: style.getPropertyValue('--bg') || '#111',
+            line: style.getPropertyValue('--line') || '#333',
+          };
+        }
         if (simulation && simActive) {
           simulation.tick();
           invalidateSpatialIndex();

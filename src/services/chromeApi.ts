@@ -1,5 +1,7 @@
-import type { Bookmark, ChromeData, Group, HistoryItem, Settings } from '../types';
+import type { Bookmark, BookmarkRoot, ChromeData, Group, HistoryItem, Settings } from '../types';
 import { DEFAULT_SETTINGS } from '../types';
+import { normalizeWidgets } from './widgetSettings';
+import { writeLocal } from './localStore';
 import {
   mockCreateBookmark,
   mockCreateFolder,
@@ -78,64 +80,49 @@ function formatClock(ms: number): string {
 
 // ─── Bookmarks tree → flat lists ──────────────────────────────────────────
 
-async function loadBookmarks(): Promise<{
-  bookmarks: Bookmark[];
-  groups: Group[];
-  barId: string | null;
-}> {
-  if (!hasChromeApi) return { bookmarks: [], groups: [], barId: null };
-  const tree = await chrome.bookmarks.getTree();
-  const root = tree[0];
-  if (!root?.children) return { bookmarks: [], groups: [], barId: null };
+type BrowserBookmarkNode = chrome.bookmarks.BookmarkTreeNode & { folderType?: string };
 
-  const bar = root.children.find((n) => n.id === '1') || root.children[0];
-  if (!bar?.children) return { bookmarks: [], groups: [], barId: null };
-  const barId = bar.id;
-
+export function flattenBookmarks(tree: chrome.bookmarks.BookmarkTreeNode[]): {
+  bookmarks: Bookmark[]; groups: Group[]; barId: string | null; roots: BookmarkRoot[];
+} {
+  const rootNodes = (tree[0]?.children ?? []).filter(node => !node.url) as BrowserBookmarkNode[];
+  const bar = rootNodes.find(node => node.folderType === 'bookmarks-bar' && !node.unmodifiable)
+    ?? rootNodes.find(node => node.id === '1' && !node.unmodifiable)
+    ?? rootNodes.find(node => !node.unmodifiable);
+  const barId = bar?.id ?? null;
   const bookmarks: Bookmark[] = [];
   const groups: Group[] = [];
-
-  // Walk the full sub-tree under the bar. Every folder becomes its own
-  // group with a `parentGroupId` link so the UI can render nested folders
-  // as a tree. URL bookmarks keep their immediate `parentId` — which now
-  // consistently points to a group id — so graph clustering "just works"
-  // for nested folders too.
-  const walk = (
-    node: chrome.bookmarks.BookmarkTreeNode,
-    groupLabelForUrls: string,
-    depth: number
-  ) => {
-    if (!node.children) return;
-    for (const child of node.children) {
+  const roots: BookmarkRoot[] = rootNodes.map(node => ({
+    id: node.id, readOnly: !!node.unmodifiable,
+    label: node.title || (node.id === barId ? '书签栏' : node.folderType === 'mobile' || node.id === '3' ? '移动设备书签' : node.folderType === 'managed' ? '受管理的书签' : '其他书签'),
+  }));
+  const walk = (node: chrome.bookmarks.BookmarkTreeNode, rootId: string, groupLabel: string, depth: number, readOnly: boolean) => {
+    for (const child of node.children ?? []) {
+      const locked = readOnly || !!child.unmodifiable;
       if (child.url) {
-        const label = child.title || domainOf(child.url);
-        bookmarks.push({
-          id: child.id,
-          parentId: child.parentId || node.id,
-          name: label,
-          url: child.url,
-          group: groupLabelForUrls,
-          color: colorFor(child.url),
-          letter: letterFor(label),
-          visits: 0,
-          last: '—',
-        });
+        const name = child.title || domainOf(child.url);
+        bookmarks.push({ id: child.id, parentId: child.parentId || node.id,
+          name, url: child.url, group: groupLabel, color: colorFor(child.url), letter: letterFor(name),
+          visits: 0, last: '—', rootId, readOnly: locked });
       } else {
-        const subLabel = child.title || '未命名';
-        const childDepth = node.id === barId ? 0 : depth + 1;
-        groups.push({
-          id: child.id,
-          label: subLabel,
-          parentGroupId: node.id === barId ? null : node.id,
-          depth: childDepth,
-        });
-        walk(child, subLabel, childDepth);
+        const label = child.title || '未命名';
+        groups.push({ id: child.id, label, parentGroupId: node.id === barId ? null : node.id,
+          depth, rootId, readOnly: locked });
+        walk(child, rootId, label, depth + 1, locked);
       }
     }
   };
-  walk(bar, '未分组', 0);
+  for (const node of rootNodes) {
+    const root = roots.find(candidate => candidate.id === node.id)!;
+    if (node.id !== barId) groups.push({ id: node.id, label: root.label, parentGroupId: null,
+      depth: 0, rootId: node.id, isRoot: true, readOnly: root.readOnly });
+    walk(node, node.id, node.id === barId ? '未分组' : root.label, node.id === barId ? 0 : 1, root.readOnly);
+  }
+  return { bookmarks, groups, barId, roots };
+}
 
-  return { bookmarks, groups, barId };
+async function loadBookmarks() {
+  return flattenBookmarks(hasChromeApi ? await chrome.bookmarks.getTree() : []);
 }
 
 // ─── History + visit counts ───────────────────────────────────────────────
@@ -190,6 +177,7 @@ async function loadTopSites(barId: string): Promise<{ bookmarks: Bookmark[]; gro
     const sites = await chrome.topSites.get();
     const bms: Bookmark[] = sites.slice(0, 20).map((s, i) => ({
       id: `ts-${i}`,
+      readOnly: true, rootId: barId,
       parentId: barId,
       name: s.title || domainOf(s.url),
       url: s.url,
@@ -207,6 +195,12 @@ async function loadTopSites(barId: string): Promise<{ bookmarks: Bookmark[]; gro
 
 // ─── Public: aggregate loader ─────────────────────────────────────────────
 
+/** Bookmark-only snapshot: capture never needs browsing history or top-site fallbacks. */
+export async function loadBookmarkData(): Promise<Pick<ChromeData, 'bookmarks' | 'groups' | 'barId' | 'roots'>> {
+  if (hasChromeApi) return loadBookmarks();
+  return mockLoadData();
+}
+
 export async function loadChromeData(): Promise<ChromeData> {
   if (!hasChromeApi) {
     // In dev we back CRUD with a localStorage-based mock, so loading just
@@ -222,13 +216,13 @@ export async function loadChromeData(): Promise<ChromeData> {
     };
   }
 
-  let { bookmarks, groups, barId } = await loadBookmarks();
+  let { bookmarks, groups, barId, roots } = await loadBookmarks();
   const { recents, visitsByUrl } = await loadHistory();
 
   if (bookmarks.length === 0 && barId) {
     const ts = await loadTopSites(barId);
     bookmarks = ts.bookmarks;
-    groups = ts.groups;
+    // Preserve real empty folders and source roots while showing top sites.
   }
 
   for (const b of bookmarks) {
@@ -245,11 +239,11 @@ export async function loadChromeData(): Promise<ChromeData> {
       recents,
       groups,
       barId,
-      source: 'chrome',
+      roots, source: 'chrome',
     };
   }
 
-  return { bookmarks, recents, groups, barId, source: 'chrome' };
+  return { bookmarks, recents, groups, barId, roots, source: 'chrome' };
 }
 
 // ─── CRUD on bookmarks and folders ────────────────────────────────────────
@@ -363,6 +357,7 @@ export function normalizeSettings(raw: Partial<Settings> | null | undefined): Se
   }
   if (typeof grouping.reuseExisting !== 'boolean') grouping.reuseExisting = DEFAULT_SETTINGS.grouping.reuseExisting;
   next.grouping = grouping;
+  next.widgets = normalizeWidgets(next.widgets);
   return next;
 }
 
@@ -380,15 +375,7 @@ export async function loadSettings(): Promise<Settings> {
 }
 
 export async function saveSettings(s: Settings): Promise<void> {
-  if (hasChromeApi && chrome.storage?.local) {
-    await chrome.storage.local.set({ [SETTINGS_KEY]: s });
-    return;
-  }
-  try {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
-  } catch {
-    /* noop */
-  }
+  await writeLocal(SETTINGS_KEY, s);
 }
 
 // ─── Todos persistence ────────────────────────────────────────────────────

@@ -60,7 +60,7 @@ describe('continuous AI organizing workspace', () => {
     expect(container.textContent).toContain('收藏，整理好了');
     mocks.chrome.loading = true; await render();
     expect(container.querySelector('[role="dialog"]')).toBe(dialog);
-    expect(container.querySelectorAll('.settings-nav button')).toHaveLength(5);
+    expect(container.querySelectorAll('.settings-nav button')).toHaveLength(6);
     await click('撤销本次整理');
     expect(mocks.undo).toHaveBeenCalledOnce();
     expect(container.textContent).toContain('已撤销上次整理');

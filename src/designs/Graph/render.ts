@@ -1,4 +1,4 @@
-import { colorCss, mixHex } from '../../services/color';
+import { colorCss, colorHex, mixHex } from '../../services/color';
 import type { Camera, GroupColor, GraphEdge, GraphNode } from "../../types";
 import { FaviconCache } from "./faviconCache";
 import { convexHull, inflateHull, pathSmoothBlob } from "./hull";
@@ -437,6 +437,118 @@ function drawNodeAvatar(
   ctx.fillText(n.letter, n.x, n.y + 1);
 }
 
+/** A glass tile and a continuous, softly bevelled folder, in radius units. */
+function drawFolderTile(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  radius: number,
+  hue: GroupColor,
+  isDark: boolean,
+): void {
+  const custom = typeof hue === 'string';
+  const base = colorHex(hue);
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(radius, radius);
+
+  // Milky tinted glass; the fine rim stays legible over a wallpaper.
+  const tile = ctx.createLinearGradient(-.6, -.88, .5, .88);
+  tile.addColorStop(0, custom
+    ? mixHex(hue, isDark ? 0 : 255, isDark ? .58 : .94)
+    : hueString(hue, isDark ? 42 : 98, .025));
+  tile.addColorStop(1, custom
+    ? mixHex(hue, isDark ? 0 : 255, isDark ? .78 : .78)
+    : hueString(hue, isDark ? 29 : 89, .06));
+  ctx.shadowColor = isDark ? 'rgba(0,0,0,.3)' : 'rgba(31,46,69,.2)';
+  ctx.shadowBlur = radius * .42;
+  ctx.shadowOffsetY = radius * .16;
+  ctx.fillStyle = tile;
+  ctx.beginPath();
+  ctx.roundRect(-.88, -.88, 1.76, 1.76, .43);
+  ctx.fill();
+  ctx.shadowColor = 'transparent';
+  ctx.shadowBlur = 0;
+  ctx.shadowOffsetY = 0;
+
+  ctx.save();
+  ctx.clip();
+  const glow = ctx.createRadialGradient(-.36, -.68, 0, -.24, -.44, 1.5);
+  glow.addColorStop(0, isDark ? 'rgba(255,255,255,.12)' : 'rgba(255,255,255,.45)');
+  glow.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = glow;
+  ctx.fillRect(-.88, -.88, 1.76, 1.76);
+
+  const reflection = ctx.createLinearGradient(0, -.88, 0, .55);
+  reflection.addColorStop(0, isDark ? 'rgba(255,255,255,.1)' : 'rgba(255,255,255,.28)');
+  reflection.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = reflection;
+  ctx.beginPath();
+  ctx.moveTo(.47, -.88);
+  ctx.lineTo(.94, -.88);
+  ctx.lineTo(.03, .53);
+  ctx.lineTo(-.45, .53);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+
+  const rim = ctx.createLinearGradient(0, -.88, 0, .88);
+  rim.addColorStop(0, isDark ? 'rgba(255,255,255,.38)' : 'rgba(255,255,255,.98)');
+  rim.addColorStop(.55, isDark ? 'rgba(255,255,255,.12)' : 'rgba(255,255,255,.5)');
+  rim.addColorStop(1, isDark ? 'rgba(255,255,255,.24)' : 'rgba(255,255,255,.86)');
+  ctx.strokeStyle = rim;
+  ctx.lineWidth = .025;
+  ctx.beginPath();
+  ctx.roundRect(-.865, -.865, 1.73, 1.73, .42);
+  ctx.stroke();
+
+  // The tab flows into the rear panel, instead of looking like a separate block.
+  const rear = ctx.createLinearGradient(0, -.44, 0, .47);
+  rear.addColorStop(0, custom ? mixHex(hue, 255, .13) : hueString(hue, 72, .15));
+  if (custom) rear.addColorStop(.25, hue);
+  rear.addColorStop(1, custom ? mixHex(hue, 0, .16) : hueString(hue, 58, .16));
+  ctx.fillStyle = rear;
+  ctx.beginPath();
+  ctx.moveTo(-.57, .3);
+  ctx.lineTo(-.57, -.32);
+  ctx.quadraticCurveTo(-.57, -.44, -.45, -.44);
+  ctx.lineTo(-.17, -.44);
+  ctx.quadraticCurveTo(-.07, -.44, -.045, -.34);
+  ctx.quadraticCurveTo(-.03, -.26, .045, -.26);
+  ctx.lineTo(.42, -.26);
+  ctx.quadraticCurveTo(.58, -.26, .58, -.1);
+  ctx.lineTo(.58, .3);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = isDark ? 'rgba(255,255,255,.16)' : 'rgba(255,255,255,.32)';
+  ctx.lineWidth = .02;
+  ctx.stroke();
+
+  // Rounded front cover: a luminous top edge, saturated foot and colored shadow.
+  const front = ctx.createLinearGradient(-.24, -.26, .22, .5);
+  front.addColorStop(0, custom ? mixHex(hue, 255, .56) : hueString(hue, 88, .075));
+  front.addColorStop(.45, custom ? mixHex(hue, 255, .22) : hueString(hue, 79, .12));
+  front.addColorStop(1, custom ? hue : hueString(hue, 72, .15));
+  ctx.shadowColor = `${base}${isDark ? '55' : '60'}`;
+  ctx.shadowBlur = radius * .3;
+  ctx.shadowOffsetY = radius * .16;
+  ctx.fillStyle = front;
+  ctx.beginPath();
+  ctx.roundRect(-.59, -.255, 1.18, .765, .17);
+  ctx.fill();
+  ctx.shadowColor = 'transparent';
+  ctx.shadowBlur = 0;
+  ctx.shadowOffsetY = 0;
+  const bevel = ctx.createLinearGradient(0, -.255, 0, .51);
+  bevel.addColorStop(0, 'rgba(255,255,255,.8)');
+  bevel.addColorStop(.4, 'rgba(255,255,255,.18)');
+  bevel.addColorStop(1, `${base}25`);
+  ctx.strokeStyle = bevel;
+  ctx.lineWidth = .022;
+  ctx.stroke();
+  ctx.restore();
+}
+
 function drawNodes(
   ctx: CanvasRenderingContext2D,
   state: RenderState,
@@ -457,57 +569,7 @@ function drawNodes(
       const hue = hueForNode(n, state.topicHueById);
       ctx.save();
       ctx.globalAlpha = alpha;
-      ctx.shadowColor = "oklch(0 0 0 / 0.16)";
-      ctx.shadowBlur = half * 0.45;
-      ctx.shadowOffsetY = half * 0.16;
-      const tile = ctx.createLinearGradient(n.x, n.y - half, n.x, n.y + half);
-      tile.addColorStop(0, typeof hue === 'string' ? mixHex(hue, isDark ? 0 : 255, isDark ? .75 : .93) : hueString(hue, isDark ? 42 : 97, 0.025));
-      tile.addColorStop(1, typeof hue === 'string' ? mixHex(hue, isDark ? 0 : 255, isDark ? .84 : .82) : hueString(hue, isDark ? 31 : 89, 0.04));
-      ctx.fillStyle = tile;
-      ctx.beginPath();
-      ctx.roundRect(
-        n.x - half * 0.88,
-        n.y - half * 0.88,
-        half * 1.76,
-        half * 1.76,
-        half * 0.46,
-      );
-      ctx.fill();
-      ctx.shadowColor = "transparent";
-      ctx.strokeStyle = isDark
-        ? "rgba(255,255,255,.16)"
-        : "rgba(255,255,255,.8)";
-      ctx.lineWidth = 1;
-      ctx.stroke();
-      ctx.fillStyle = hueString(hue, isDark ? 64 : 62, 0.14);
-      ctx.beginPath();
-      ctx.roundRect(
-        n.x - half * 0.52,
-        n.y - half * 0.38,
-        half * 0.5,
-        half * 0.28,
-        half * 0.09,
-      );
-      ctx.fill();
-      const folder = ctx.createLinearGradient(
-        n.x,
-        n.y - half * 0.2,
-        n.x,
-        n.y + half * 0.4,
-      );
-      folder.addColorStop(0, typeof hue === 'string' ? mixHex(hue, 255, .12) : hueString(hue, isDark ? 76 : 77, 0.12));
-      if (typeof hue === 'string') folder.addColorStop(.25, hue);
-      folder.addColorStop(1, typeof hue === 'string' ? mixHex(hue, 0, .1) : hueString(hue, isDark ? 63 : 64, 0.16));
-      ctx.fillStyle = folder;
-      ctx.beginPath();
-      ctx.roundRect(
-        n.x - half * 0.55,
-        n.y - half * 0.22,
-        half * 1.1,
-        half * 0.72,
-        half * 0.12,
-      );
-      ctx.fill();
+      drawFolderTile(ctx, n.x, n.y, half, hue, isDark);
 
       if (detail.labels) {
         const count = String(n.bookmarkCount ?? 0);

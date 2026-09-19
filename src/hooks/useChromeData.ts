@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ChromeData } from '../types';
 import { loadChromeData, subscribeBookmarkChanges } from '../services/chromeApi';
 
@@ -11,58 +11,27 @@ export function useChromeData(): {
   const [data, setData] = useState<ChromeData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const alive = useRef(false);
+  const revision = useRef(0);
 
   const refresh = useCallback(() => {
-    setLoading(true);
-    setError(null);
-    loadChromeData()
-      .then((d) => {
-        setData(d);
-      })
-      .catch((err: unknown) => {
-        const msg = err instanceof Error ? err.message : '无法读取 Chrome 数据';
-        setError(msg);
-      })
-      .finally(() => setLoading(false));
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    loadChromeData()
-      .then((d) => {
-        if (!cancelled) setData(d);
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) {
-          const msg = err instanceof Error ? err.message : '无法读取 Chrome 数据';
-          setError(msg);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  // Auto-refresh when the user edits bookmarks in Chrome directly.
-  useEffect(() => {
-    const unsub = subscribeBookmarkChanges(() => {
-      loadChromeData()
-        .then((d) => {
-          setData(d);
-          setError(null);
-        })
-        .catch((err: unknown) => {
-          const msg = err instanceof Error ? err.message : '无法读取 Chrome 数据';
-          setError(msg);
-        });
+    const run = ++revision.current;
+    setLoading(true); setError(null);
+    void loadChromeData().then(next => {
+      if (alive.current && run === revision.current) setData(next);
+    }).catch((failure: unknown) => {
+      if (alive.current && run === revision.current) setError(failure instanceof Error ? failure.message : '无法读取 Chrome 数据');
+    }).finally(() => {
+      if (alive.current && run === revision.current) setLoading(false);
     });
-    return unsub;
   }, []);
+
+  useEffect(() => {
+    alive.current = true;
+    const unsubscribe = subscribeBookmarkChanges(refresh);
+    refresh();
+    return () => { alive.current = false; revision.current++; unsubscribe(); };
+  }, [refresh]);
 
   return { data, loading, error, refresh };
 }

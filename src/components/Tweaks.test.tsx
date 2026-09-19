@@ -72,7 +72,7 @@ describe("Settings window", () => {
     expect(
       container.querySelector('[role="dialog"]')?.getAttribute("aria-label"),
     ).toBe("设置 · 智能整理");
-    expect(container.querySelectorAll(".settings-nav button")).toHaveLength(5);
+    expect(container.querySelectorAll(".settings-nav button")).toHaveLength(6);
     await navigate("外观");
     expect(container.querySelector('[aria-label="主题模式"]')).not.toBeNull();
   });

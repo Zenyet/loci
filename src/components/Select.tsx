@@ -23,6 +23,7 @@ interface SelectProps {
   label: string;
   placeholder?: string;
   disabled?: boolean;
+  className?: string;
 }
 
 /** A keyboard-operated listbox. The menu stays inside the modal's focus boundary. */
@@ -33,6 +34,7 @@ export function Select({
   label,
   placeholder = "请选择",
   disabled = false,
+  className = '',
 }: SelectProps) {
   const id = useId();
   const [open, setOpen] = useState(false);
@@ -47,11 +49,13 @@ export function Select({
   const revealActive = useRef(false);
   const selectedIndex = options.findIndex((option) => option.value === value);
   const reveal = () => {
+    if (disabled || !options.length) return;
     revealActive.current = true;
     setActive(Math.max(0, selectedIndex));
     setOpen(true);
   };
   const choose = (index: number) => {
+    if (disabled) return;
     if (options[index]) onChange(options[index].value);
     setOpen(false);
     triggerRef.current?.focus();
@@ -79,21 +83,25 @@ export function Select({
       const upward =
         below < Math.min(220, options.length * 42 + 12) && above > below;
       const height = Math.min(294, upward ? above : below);
+      const scrollTop = host === document.body ? 0 : host.scrollTop;
+      const scrollLeft = host === document.body ? 0 : host.scrollLeft;
+      const borderTop = host === document.body ? 0 : host.clientTop;
+      const borderLeft = host === document.body ? 0 : host.clientLeft;
       setPlacement({
         host,
         style: {
           position: host === document.body ? "fixed" : "absolute",
           width,
-          left: Math.max(
+          left: scrollLeft - borderLeft + Math.max(
             12,
             Math.min(
               anchor.right - boundary.left - width,
               boundary.width - width - 12,
             ),
           ),
-          top: upward ? undefined : anchor.bottom - boundary.top + 6,
+          top: upward ? undefined : anchor.bottom - boundary.top + scrollTop - borderTop + 6,
           bottom: upward
-            ? boundary.top + boundary.height - anchor.top + 6
+            ? (host === document.body ? boundary.height : host.clientHeight) - (anchor.top - boundary.top + scrollTop - borderTop) + 6
             : undefined,
           maxHeight: Math.max(80, height),
         },
@@ -117,6 +125,10 @@ export function Select({
       document.removeEventListener("pointerdown", outside, true);
     };
   }, [open, options.length]);
+
+  useEffect(() => {
+    if (disabled || !options.length) setOpen(false);
+  }, [disabled, options.length]);
 
   useEffect(() => {
     const menu = menuRef.current;
@@ -193,14 +205,14 @@ export function Select({
       <button
         ref={triggerRef}
         type="button"
-        className="ui-select-trigger"
+        className={`ui-select-trigger ${className}`.trim()}
         role="combobox"
         aria-label={label}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={open ? id : undefined}
         aria-activedescendant={open ? `${id}-${active}` : undefined}
-        disabled={disabled}
+        disabled={disabled || !options.length}
         onClick={() => (open ? setOpen(false) : reveal())}
         onKeyDown={onKeyDown}
         onBlur={(event) => {

@@ -23,9 +23,11 @@ interface Props {
 export function AiOrganizer({ settings, onChange, data, flow, aiReady, onClassify, classifying }: Props) {
   const stage = flow?.stage ?? 'idle';
   const isWorking = stage === 'generating' || stage === 'applying' || stage === 'undoing';
-  const ungrouped = data?.bookmarks.filter(bookmark => bookmark.parentId === data.barId).length ?? 0;
-  const total = data?.bookmarks.length ?? 0;
-  const count = settings.grouping.scope === 'all' ? total : ungrouped;
+  const ungrouped = data?.bookmarks.filter(bookmark => !bookmark.readOnly && bookmark.parentId === data.barId).length ?? 0;
+  const total = data?.bookmarks.filter(bookmark => !bookmark.readOnly).length ?? 0;
+  const selection = flow?.selection;
+  const selectedCount = selection ? data?.bookmarks.filter(bookmark => !bookmark.readOnly && bookmark.parentId === selection.inboxId && selection.ids.includes(bookmark.id)).length ?? 0 : 0;
+  const count = selection ? selectedCount : settings.grouping.scope === 'all' ? total : ungrouped;
   const provider = getProviderConfig(settings.ai.provider);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const modelRef = useRef<HTMLDetailsElement>(null);
@@ -62,16 +64,16 @@ export function AiOrganizer({ settings, onChange, data, flow, aiReady, onClassif
 
     {stage === 'idle' && <>
       <section className="ai-scope" aria-label="选择整理范围">
-        <div className="ai-section-heading"><h3>从哪些书签开始？</h3><span>{total} 个书签</span></div>
-        <div className="ai-scope-options" role="group" aria-label="整理范围">
+        <div className="ai-section-heading"><h3>{selection ? '整理收件箱中选中的收藏' : '从哪些书签开始？'}</h3><span>{selection ? count : total} 个书签</span></div>
+        {selection ? <div className="ai-selected-scope"><p>仅将选中的 {count} 个书签交给 AI。新建分组放在书签栏，已有分组可按偏好复用。</p><button type="button" className="ai-text-button" onClick={() => flow?.select?.(null)}>切换为常规整理</button></div> : <div className="ai-scope-options" role="group" aria-label="整理范围">
           {([{ value: 'ungrouped', label: '未分组书签', count: ungrouped, hint: '为散落的收藏找到归属' }, { value: 'all', label: '全部书签', count: total, hint: '重新梳理整个收藏空间' }] as const).map(option => (
             <button type="button" key={option.value} aria-pressed={settings.grouping.scope === option.value} onClick={() => onChange({ grouping: { ...settings.grouping, scope: option.value } })}>
               <span className="ai-scope-top"><Icon name={option.value === 'all' ? 'folder' : 'bookmark'} size={18} /><strong>{option.count}</strong><span className="ai-scope-check">{settings.grouping.scope === option.value && <Icon name="check" size={12} />}</span></span>
               <span>{option.label}</span><small>{option.hint}</small>
             </button>
           ))}
-        </div>
-        {!count && <p className="ai-help">{total ? '未分组书签已经整理好了。选择「全部书签」可以重新整理。' : '先添加一些书签，再让 AI 帮你整理。'}</p>}
+        </div>}
+        {!count && <p className="ai-help">{selection ? '所选书签已经离开收件箱。请返回收件箱重新选择。' : total ? '未分组书签已经整理好了。选择「全部书签」可以重新整理。' : '先添加一些书签，再让 AI 帮你整理。'}</p>}
       </section>
       <details className="ai-disclosure" ref={modelRef} open={modelOpen} onToggle={event => setModelOpen(event.currentTarget.open)}>
         <summary><Icon name="link" size={17} /><span>模型服务<small>{aiReady ? `${provider?.name ?? '自定义'} · ${settings.ai.model || '默认模型'}` : '连接模型，让 AI 了解你的收藏'}</small></span><span className="ai-config-state">{aiReady ? '已配置' : '待配置'}</span><Icon name="chevron-down" size={14} /></summary>
@@ -89,7 +91,7 @@ export function AiOrganizer({ settings, onChange, data, flow, aiReady, onClassif
         </div>
       </div>
       <p className="ai-help">生成时会向所选模型发送书签标题、域名与分组名称。应用后可撤销上次整理。</p>
-      <div className="ai-secondary">
+      {!selection && <div className="ai-secondary">
         <div><span>只想发现书签之间的联系？</span><small>分析主题会更新连线，不移动书签。</small></div>
         <button type="button" className="ai-text-button" disabled={!aiReady || !total || analyzing || classifying || !onClassify} onClick={async () => {
           if (analyzing || !onClassify) return;
@@ -97,7 +99,7 @@ export function AiOrganizer({ settings, onChange, data, flow, aiReady, onClassif
           try { await onClassify(); setClassifyMessage('书签主题已更新。'); } catch (error) { setClassifyMessage(groupingErrorMessage(error)); }
           finally { setAnalyzing(false); }
         }}>{analyzing || classifying ? '分析中…' : '分析主题'}<Icon name="arrow" size={12} /></button>
-      </div>
+      </div>}
       {classifyMessage && <p className="ai-help" role="status">{classifyMessage}</p>}
       {flow?.canUndo && <button type="button" className="ai-text-button" onClick={() => void flow.undo()}>撤销上次整理</button>}
     </>}

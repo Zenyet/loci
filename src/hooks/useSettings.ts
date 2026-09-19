@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { DEFAULT_SETTINGS, type ResolvedTheme, type Settings } from "../types";
-import { loadSettings, saveSettings } from "../services/chromeApi";
+import { loadSettings, saveSettings, normalizeSettings } from "../services/chromeApi";
+import { subscribeLocal } from '../services/localStore';
 import { backgroundImageCssValue } from "../data/backgrounds";
 
 export function useSettings(): {
@@ -14,10 +15,17 @@ export function useSettings(): {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    loadSettings().then((s) => {
-      setSettings(s);
-      setReady(true);
-    });
+    let alive = true;
+    let version = 0;
+    const reload = () => {
+      const run = ++version;
+      void loadSettings().then(s => {
+        if (alive && run === version) { setSettings(s); setReady(true); }
+      }).catch(() => { if (alive) setReady(true); });
+    };
+    const unsubscribe = subscribeLocal('newtab-settings', reload);
+    reload();
+    return () => { alive = false; unsubscribe(); };
   }, []);
 
   useEffect(() => {
@@ -40,8 +48,8 @@ export function useSettings(): {
 
   const update = useCallback((patch: Partial<Settings>) => {
     setSettings((prev) => {
-      const next = { ...prev, ...patch };
-      void saveSettings(next);
+      const next = normalizeSettings({ ...prev, ...patch });
+      void saveSettings(next).catch(() => {});
       return next;
     });
   }, []);

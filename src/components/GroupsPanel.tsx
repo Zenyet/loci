@@ -74,7 +74,7 @@ export function GroupsPanel({
   const countFor = (id: string) => counts.get(id) ?? 0;
   const visibleGroups = groups.filter(group => group.label.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
   const totalBookmarks = groups.reduce((sum, group) => sum + countFor(group.id), 0);
-  const siblingsOf = (parentId: string | null) => groups.filter(group => group.parentGroupId === parentId);
+  const siblingsOf = (parentId: string | null) => groups.filter(group => group.parentGroupId === parentId && !group.isRoot);
   const isDescendantOf = (id: string, ancestorId: string): boolean => {
     const seen = new Set<string>();
     let cursor: string | null = id;
@@ -91,7 +91,7 @@ export function GroupsPanel({
     return `确认删除“${group.label}”？其中的 ${bookmarksCount} 个书签${descendants.length > 1 ? `和 ${descendants.length - 1} 个子分组` : ''}也会一并移除。`;
   };
   const onRowDragStart = (e: DragEvent<HTMLElement>, g: Group) => {
-    if (g.id === protectedId) return;
+    if (g.id === protectedId || g.isRoot || g.readOnly) return;
     setDragId(g.id);
     e.dataTransfer.effectAllowed = 'move';
     // Some browsers need a non-empty payload to actually start the drag.
@@ -106,7 +106,7 @@ export function GroupsPanel({
   };
 
   const onRowDragOver = (e: DragEvent<HTMLElement>, g: Group) => {
-    if (!dragId || dragId === g.id) return;
+    if (!dragId || dragId === g.id || g.readOnly) return;
     // Block dropping a group into one of its descendants.
     if (isDescendantOf(g.id, dragId)) return;
     e.preventDefault();
@@ -115,6 +115,7 @@ export function GroupsPanel({
     let zone = zoneFor(e.clientY, rect.top, rect.height);
     // You can't nest *inside* the virtual "置顶" row — it's not a real
     // folder in our UI sense. Collapse inside→after for it.
+    if (g.isRoot) zone = 'inside';
     if (g.id === protectedId && zone === 'inside') zone = 'after';
     if (!dropTarget || dropTarget.id !== g.id || dropTarget.zone !== zone) {
       setDropTarget({ id: g.id, zone });
@@ -122,7 +123,7 @@ export function GroupsPanel({
   };
 
   const onRowDrop = (e: DragEvent<HTMLElement>, g: Group) => {
-    if (!dragId || dragId === g.id || !protectedId) {
+    if (!dragId || dragId === g.id || !protectedId || g.readOnly) {
       resetDrag();
       return;
     }
@@ -222,7 +223,7 @@ export function GroupsPanel({
         <span id="groups-create-hint" className="groups-create__hint" role={createError ? 'alert' : undefined}>{createError || `创建于 ${createLocation} · 点击文件夹可选颜色`}</span>
       </form>}
       {visibleGroups.map(group => {
-        const isProtected = group.id === protectedId;
+        const isProtected = group.id === protectedId || group.isRoot || group.readOnly;
         const isEditing = editingId === group.id;
         const isCurrent = focusedId === group.id;
         const hue = hueOverrides[group.id] ?? folderHue(group.id);

@@ -1,4 +1,4 @@
-import { act, type ComponentProps } from 'react';
+import { act, useEffect, type ComponentProps } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { GraphCanvas } from './GraphCanvas';
@@ -57,6 +57,27 @@ beforeEach(async () => {
   await flushFrame();
 });
 afterEach(async () => { await act(async () => root.unmount()); container.remove(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+
+it('uses the new folder theme on the first frame after the parent applies settings', async () => {
+  const previous = document.body.style.getPropertyValue('--bg');
+  function ThemeHost({ mode }: { mode: 'light' | 'dark' }) {
+    useEffect(() => {
+      document.body.style.setProperty('--bg', mode === 'light' ? 'oklch(0.98 0 0)' : 'oklch(0.22 0 0)');
+    }, [mode]);
+    return <GraphCanvas {...props} themeKey={mode}/>;
+  }
+  try {
+    for (const mode of ['light', 'dark', 'light'] as const) {
+      await act(async () => root.render(<ThemeHost mode={mode}/>));
+      await flushFrame();
+      expect(vi.mocked(drawGraph).mock.calls.at(-1)![3].bg)
+        .toBe(mode === 'light' ? 'oklch(0.98 0 0)' : 'oklch(0.22 0 0)');
+    }
+  } finally {
+    if (previous) document.body.style.setProperty('--bg', previous);
+    else document.body.style.removeProperty('--bg');
+  }
+});
 
 describe('Canvas modal isolation', () => {
   it('does not hover nodes when the pointer belongs to an overlay at the same coordinates', async () => {

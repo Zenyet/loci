@@ -1,7 +1,8 @@
 import { useId } from 'react';
 
-export type PreferenceIconName = 'look' | 'wallpaper' | 'search' | 'behavior' | 'ai';
+export type PreferenceIconName = 'look' | 'wallpaper' | 'search' | 'behavior' | 'ai' | 'widgets';
 const palettes: Record<PreferenceIconName, [string, string, string]> = {
+  widgets: ['#9cd8bd', '#5ab78d', '#2b8864'],
   look: ['#cdb5ff', '#9276ea', '#6b5bcd'],
   wallpaper: ['#79ddee', '#34adce', '#2787b8'],
   search: ['#78caff', '#3e95f3', '#2265d8'],
@@ -39,7 +40,8 @@ export function PreferenceIcon({ name }: { name: PreferenceIconName }) {
       </defs>
       <rect x="2" y="2" width="60" height="60" rx="18" fill={url('base')} />
       <rect x="2" y="2" width="60" height="60" rx="18" fill={url('shine')} />
-      {name === 'look' && <g filter={url('shadow')}>
+      {name === 'widgets' && <g filter={url('shadow')} fill={url('white')}><rect x="16" y="16" width="13" height="13" rx="4" /><rect x="35" y="16" width="13" height="13" rx="4" /><rect x="16" y="35" width="13" height="13" rx="4" /><path d="M41.5 36v11m-5.5-5.5h11" stroke="#fff" strokeWidth="3" strokeLinecap="round" /></g>}
+      {name === 'look'  && <g filter={url('shadow')}>
         <circle cx="32" cy="32" r="16.2" fill="#4e4398" fillOpacity=".3" />
         <path d="M32 15.8a16.2 16.2 0 0 0 0 32.4Z" fill={url('white')} />
         <circle cx="32" cy="32" r="16.2" stroke={url('white')} strokeWidth="1.7" />

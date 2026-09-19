@@ -7,10 +7,10 @@ import type { Bookmark, ChromeData, Group, GroupProposal, GroupScope, GroupingUn
  */
 export function selectScopedBookmarks(data: ChromeData, scope: GroupScope): typeof data.bookmarks {
   if (scope === 'all') {
-    return data.bookmarks;
+    return data.bookmarks.filter(b => !b.readOnly);
   }
   // scope === 'ungrouped'
-  return data.bookmarks.filter((b) => b.parentId === data.barId);
+  return data.bookmarks.filter((b) => !b.readOnly && b.parentId === data.barId);
 }
 
 /**
@@ -27,7 +27,7 @@ export function toProposal(
   reuseExisting: boolean,
 ): GroupProposal {
   const valid = new Set(inputIds);
-  const byName = new Map(groups.map((g) => [g.label.trim().toLowerCase(), g.id] as const));
+  const byName = new Map(groups.filter(g => !g.readOnly && !g.isRoot).map((g) => [g.label.trim().toLowerCase(), g.id] as const));
   const covered = new Set<string>();
 
   const proposedGroups: ProposedGroup[] = raw.groups

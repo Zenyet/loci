@@ -14,6 +14,9 @@ export interface Group {
   /** 0 for top-level, 1 for subgroups of a top-level, etc. Pre-computed to
    *  avoid re-walking the parent chain at render time. */
   depth: number;
+  rootId?: string;
+  isRoot?: boolean;
+  readOnly?: boolean;
 }
 
 export interface Bookmark {
@@ -26,6 +29,31 @@ export interface Bookmark {
   letter: string;
   visits: number;
   last: string;
+  rootId?: string;
+  readOnly?: boolean;
+}
+
+export interface BookmarkRoot {
+  id: string;
+  label: string;
+  readOnly: boolean;
+}
+
+export type WidgetId = 'clock' | 'weather' | 'todos';
+export interface WeatherCity {
+  id: number;
+  name: string;
+  region: string;
+  country: string;
+  latitude: number;
+  longitude: number;
+}
+export interface WidgetSettings {
+  version: 1;
+  order: WidgetId[];
+  clock: { enabled: boolean; hour12: boolean };
+  weather: { enabled: boolean; city: WeatherCity | null; unit: 'celsius' | 'fahrenheit' };
+  todos: { enabled: boolean };
 }
 
 export interface GraphItem extends Bookmark {
@@ -133,6 +161,7 @@ export interface GroupingUndo {
 }
 
 export interface Settings {
+  widgets: WidgetSettings;
   theme: Theme;
   accentHue: number;
   density: Density;
@@ -163,6 +192,13 @@ export interface Settings {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
+  widgets: {
+    version: 1,
+    order: ['clock', 'weather', 'todos'],
+    clock: { enabled: false, hour12: false },
+    weather: { enabled: false, city: null, unit: 'celsius' },
+    todos: { enabled: false },
+  },
   theme: "light",
   accentHue: 260,
   density: "cozy",
@@ -187,6 +223,7 @@ export const DEFAULT_SETTINGS: Settings = {
 };
 
 export interface ChromeData {
+  roots?: BookmarkRoot[];
   bookmarks: Bookmark[];
   recents: HistoryItem[];
   groups: Group[];
