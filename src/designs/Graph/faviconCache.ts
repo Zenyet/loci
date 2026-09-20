@@ -8,6 +8,7 @@ const FAVICON_ATTEMPT_TIMEOUT_MS = 8000;
 const MIN_FAVICON_SIDE = 8;
 const MAX_FAVICON_SIDE = 192;
 const MAX_FAVICON_CACHE_ENTRIES = 384;
+const MAX_CONCURRENT_LOADS = 6;
 
 export function isDrawableFaviconImage(img: HTMLImageElement): boolean {
   return (
@@ -27,10 +28,22 @@ export function isDrawableFaviconImage(img: HTMLImageElement): boolean {
  */
 export class FaviconCache {
   private cache = new Map<string, Entry>();
-  private scheduledOrigins = new Set<string>();
+  private origins = new Map<string, string | null>();
+  private queue = new Map<string, { urls: string[]; onReady: () => void }>();
+  private active = new Map<string, () => void>();
+  private cancelScheduled: (() => void) | null = null;
+  private documentReady = false;
+
+  private origin(pageUrl: string): string | null {
+    if (this.origins.has(pageUrl)) return this.origins.get(pageUrl)!;
+    const key = bookmarkOriginKey(pageUrl);
+    if (this.origins.size >= 4096) this.origins.delete(this.origins.keys().next().value!);
+    this.origins.set(pageUrl, key);
+    return key;
+  }
 
   get(pageUrl: string): HTMLImageElement | null {
-    const key = bookmarkOriginKey(pageUrl);
+    const key = this.origin(pageUrl);
     if (!key) return null;
     const entry = this.cache.get(key);
     if (!(entry instanceof HTMLImageElement)) return null;
@@ -43,27 +56,54 @@ export class FaviconCache {
   }
 
   markBroken(pageUrl: string): void {
-    const key = bookmarkOriginKey(pageUrl);
+    const key = this.origin(pageUrl);
     if (!key) return;
     this.set(key, 'error');
-    this.scheduledOrigins.delete(key);
+    this.queue.delete(key);
+    this.active.get(key)?.();
+    this.active.delete(key);
+    this.pump();
   }
 
   ensureLoaded(pageUrl: string, onReady: () => void): void {
-    const key = bookmarkOriginKey(pageUrl);
+    const key = this.origin(pageUrl);
     if (!key) return;
-    if (this.cache.has(key) || this.scheduledOrigins.has(key)) return;
+    if (this.cache.has(key) || this.queue.has(key) || this.active.has(key)) return;
 
     const urls = faviconCandidates(pageUrl);
     if (urls.length === 0) return;
 
-    this.scheduledOrigins.add(key);
-    scheduleAfterDocumentLoad(() => {
-      this.scheduledOrigins.delete(key);
-      if (this.cache.has(key)) return;
+    this.queue.set(key, { urls, onReady });
+    if (this.documentReady) this.pump();
+    else if (!this.cancelScheduled) {
+      this.cancelScheduled = scheduleAfterDocumentLoad(() => {
+        this.cancelScheduled = null;
+        this.documentReady = true;
+        this.pump();
+      });
+    }
+  }
+
+  /** Navigation/unmount must not leave hundreds of fetches and timers alive. */
+  cancelPending(): void {
+    this.cancelScheduled?.();
+    this.cancelScheduled = null;
+    this.queue.clear();
+    for (const [key, cancel] of this.active) {
+      cancel();
+      if (this.cache.get(key) === 'loading') this.cache.delete(key);
+    }
+    this.active.clear();
+  }
+
+  private pump(): void {
+    if (!this.documentReady) return;
+    while (this.active.size < MAX_CONCURRENT_LOADS && this.queue.size) {
+      const [key, { urls, onReady }] = this.queue.entries().next().value!;
+      this.queue.delete(key);
       this.set(key, 'loading');
       this.tryUrls(urls, key, onReady);
-    });
+    }
   }
 
   private set(key: string, entry: Entry): void {
@@ -81,11 +121,6 @@ export class FaviconCache {
   }
 
   private tryUrls(urls: string[], key: string, onReady: () => void, index = 0): void {
-    if (index >= urls.length) {
-      this.set(key, 'error');
-      return;
-    }
-
     const url = urls[index];
     const img = new Image();
     img.decoding = 'async';
@@ -97,15 +132,21 @@ export class FaviconCache {
       if (settled) return;
       settled = true;
       if (timeoutId !== undefined) window.clearTimeout(timeoutId);
-      if (next === 'ok' && isDrawableFaviconImage(img)) {
-        this.set(key, img);
-        onReady();
-        return;
-      }
       img.onload = null;
       img.onerror = null;
+      if (next === 'ok' && isDrawableFaviconImage(img)) {
+        this.set(key, img);
+        this.active.delete(key);
+        onReady();
+        this.pump();
+        return;
+      }
       img.src = '';
-      if (index + 1 >= urls.length) this.set(key, 'error');
+      if (index + 1 >= urls.length) {
+        this.set(key, 'error');
+        this.active.delete(key);
+        this.pump();
+      }
       else this.tryUrls(urls, key, onReady, index + 1);
     };
 
@@ -121,6 +162,13 @@ export class FaviconCache {
       decoded.then(() => finish('ok'), () => finish('retry'));
     };
     img.onerror = () => finish('retry');
+
+    this.active.set(key, () => {
+      settled = true;
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+      img.onload = img.onerror = null;
+      img.src = '';
+    });
 
     img.src = url;
   }

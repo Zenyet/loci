@@ -1,6 +1,6 @@
 import type { GroupColor, GroupColors } from '../../types';
 import type { CSSProperties } from 'react';
-import { useEffect, useLayoutEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import type { GraphEdge, GraphItem, GraphNode, Group, PinsMap } from '../../types';
 import { FaviconCache } from './faviconCache';
 import { buildNodeIndex, findEdgeAt, findNodeAt, type NodeIndex } from './hitTest';
@@ -9,6 +9,7 @@ import { clampScale, desktopCamera, useCamera, viewToWorld } from './useCamera';
 import { useGraphSim } from './useGraphSim';
 import { advanceHoverFade } from './hoverFade';
 import { HoverIntent } from './hoverIntent';
+import { RenderSpriteCache } from './spriteCache';
 
 interface Props {
   interactionBlocked?: boolean;
@@ -82,6 +83,9 @@ export function GraphCanvas(props: Props) {
   });
   const faviconsRef = useRef(new FaviconCache());
   const textCacheRef = useRef(new RenderTextCache());
+  const spriteCacheRef = useRef(new RenderSpriteCache());
+  const renderEdges = useMemo(() => props.autoEdges?.length
+    ? props.edges.concat(props.autoEdges) : props.edges, [props.edges, props.autoEdges]);
 
   // Interaction state — kept in refs to avoid re-renders.
   const hoverNodeRef = useRef<string | null>(null);
@@ -157,6 +161,7 @@ export function GraphCanvas(props: Props) {
         requestFrame();
       });
     }
+    return () => faviconsRef.current.cancelPending();
   }, [props.bookmarks]);
 
   // Force a redraw whenever render-relevant props change. Without this the
@@ -291,9 +296,13 @@ export function GraphCanvas(props: Props) {
     let raf: number | null = null;
     let running = true;
     let previousFrameAt: number | null = null;
+    let fadeNodes: GraphNode[] | null = null;
+    let fadeNodeIds = new Set<string>();
+    let fadeTarget: string | null = null;
+    let fadeActive = false;
 
     const scheduleFrame = () => {
-      if (!running || raf !== null) return;
+      if (!running || raf !== null || document.visibilityState === 'hidden') return;
       raf = requestAnimationFrame(loop);
     };
     scheduleFrameRef.current = scheduleFrame;
@@ -340,7 +349,7 @@ export function GraphCanvas(props: Props) {
 
       const simulation = sim.simulationRef.current;
       const alpha = simulation?.alpha() ?? 0;
-      const simActive = alpha > 0.003;
+      const simActive = sim.nodesRef.current.length > 0 && alpha > 0.003;
 
       // Ease the hover spotlight toward its target each frame (snap when the
       // user prefers reduced motion).
@@ -353,19 +362,25 @@ export function GraphCanvas(props: Props) {
         : hoverTarget;
       const elapsed = previousFrameAt === null ? 16 : Math.min(50, Math.max(1, now - previousFrameAt));
       previousFrameAt = now;
-      const fadeAnimating = advanceHoverFade(
-        nodeOpacityRef.current, sim.nodesRef.current.map(node => node.id),
-        dragIdRef.current ?? hoverNodeRef.current, elapsed, !!reduceMotionRef.current,
-      );
+      const nextFadeTarget = dragIdRef.current ?? hoverNodeRef.current;
+      const topologyChanged = fadeNodes !== sim.nodesRef.current;
+      if (topologyChanged) {
+        fadeNodes = sim.nodesRef.current;
+        fadeNodeIds = new Set(fadeNodes.map(node => node.id));
+      }
+      // A settled hover needs no O(N) opacity work during camera movement.
+      if (fadeActive || topologyChanged || nextFadeTarget !== fadeTarget) {
+        fadeActive = advanceHoverFade(nodeOpacityRef.current, fadeNodeIds,
+          nextFadeTarget, elapsed, !!reduceMotionRef.current);
+        fadeTarget = nextFadeTarget;
+      }
+      const fadeAnimating = fadeActive;
       const hoverAnimating = spotlightAnimating || fadeAnimating;
 
       const active =
         simActive ||
         trackingRef.current !== null ||
         needsFrameRef.current ||
-        dragIdRef.current !== null ||
-        panRef.current !== null ||
-        ghostRef.current !== null ||
         hoverAnimating;
 
       if (active) {
@@ -388,10 +403,7 @@ export function GraphCanvas(props: Props) {
         const state: RenderState = {
           nodes: sim.nodesRef.current,
           nodeById: getNodeById(),
-          edges:
-            props.autoEdges && props.autoEdges.length
-              ? props.edges.concat(props.autoEdges)
-              : props.edges,
+          edges: renderEdges,
           showEdges: props.showEdges ?? true,
           hoverProgress: hoverProgressRef.current,
           nodeOpacity: nodeOpacityRef.current,
@@ -403,6 +415,7 @@ export function GraphCanvas(props: Props) {
           ghost: ghostRef.current,
           favicons: faviconsRef.current,
           textCache: textCacheRef.current,
+          spriteCache: spriteCacheRef.current,
           highlightGroupId: meta.highlightGroupId,
           highlightGroupMembers: highlightGroupMembersRef.current,
           highlightGroupHue: meta.highlightGroupHue,
@@ -411,16 +424,15 @@ export function GraphCanvas(props: Props) {
           topicHueById: props.topicHueById ?? null,
         };
         drawGraph(ctx, state, camera.cameraRef.current, theme, lastSizeRef.current);
-        needsFrameRef.current = false;
+        // Finish deferred high-resolution sprites after wheel input stops.
+        // A full cache does not request refinement, so it cannot cause a loop.
+        needsFrameRef.current = spriteCacheRef.current.needsRefinement;
 
         const nextAlpha = simulation?.alpha() ?? 0;
         if (
-          nextAlpha > 0.003 ||
+          (sim.nodesRef.current.length > 0 && nextAlpha > 0.003) ||
           trackingActive ||
           trackingRef.current !== null ||
-          dragIdRef.current !== null ||
-          panRef.current !== null ||
-          ghostRef.current !== null ||
           hoverAnimating ||
           needsFrameRef.current
         ) {
@@ -449,7 +461,9 @@ export function GraphCanvas(props: Props) {
     };
     // filterMatches is read via filterMatchesRef so it doesn't belong here;
     // recreating the rAF loop on each keystroke would just churn timers.
-  }, [sim, props.bookmarks, props.edges, props.autoEdges, props.showEdges, props.topicHueById, props.pins, props.themeKey, camera]);
+  }, [sim, props.bookmarks, renderEdges, props.showEdges, props.topicHueById, props.pins, props.themeKey, camera]);
+
+  useEffect(() => () => spriteCacheRef.current.clear(), []);
 
   // A modal can appear while a node is highlighted or a pointer is captured.
   // Clear the interaction before paint; merely covering the canvas is not enough.
@@ -491,6 +505,7 @@ export function GraphCanvas(props: Props) {
       findEdgeAt(props.edges, getNodeById(), wx, wy, 6 / camera.cameraRef.current.scale);
 
     let latestPointer: { clientX: number; clientY: number } | null = null;
+    let wheelRect: DOMRect | null = null;
     let hoverIntent = new HoverIntent({ nodeId: hoverNodeRef.current, edgeId: hoverEdgeRef.current });
     const clearHover = () => {
       latestPointer = null;
@@ -503,6 +518,7 @@ export function GraphCanvas(props: Props) {
       canvas.style.cursor = 'grab';
     };
     const sampleHover = (now: number): boolean => {
+      wheelRect = null;
       if (latestPointer) {
         const point = latestPointer;
         latestPointer = null;
@@ -671,8 +687,11 @@ export function GraphCanvas(props: Props) {
       ev.preventDefault();
       clearHover();
       cancelTracking();
-      const rect = canvas.getBoundingClientRect();
-      camera.wheelZoom(ev.clientX - rect.left, ev.clientY - rect.top, ev.deltaY, {
+      // Trackpads can emit multiple events per paint. Read layout just once
+      // while preserving each event's anchor and per-event scale clamp.
+      const rect = wheelRect ??= canvas.getBoundingClientRect();
+      const delta = ev.deltaY * (ev.deltaMode === 1 ? 16 : ev.deltaMode === 2 ? rect.height : 1);
+      camera.wheelZoom(ev.clientX - rect.left, ev.clientY - rect.top, delta, {
         width: rect.width,
         height: rect.height,
       });

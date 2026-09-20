@@ -1,0 +1,337 @@
+{
+  "date": "2026-09-20T04:45:14.132Z",
+  "baseline": true,
+  "baselineRef": "HEAD",
+  "mode": "headless",
+  "refresh": {
+    "frameBudgetMs": 16.699999999999932,
+    "refreshHz": 59.88023952095833
+  },
+  "browser": {
+    "protocolVersion": "1.3",
+    "product": "Chrome/153.0.8010.52",
+    "revision": "@78e5e45d4bb41035e17ea4da2cc257f496416ac9",
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
+    "jsVersion": "15.3.76.13"
+  },
+  "gpu": {
+    "devices": [
+      {
+        "vendorId": 4203,
+        "deviceId": 0,
+        "vendorString": "Google Inc. (Apple)",
+        "deviceString": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Version 27.0 (Build 26A428))",
+        "driverVendor": "Apple",
+        "driverVersion": "27.0"
+      }
+    ],
+    "auxAttributes": {
+      "amdSwitchable": false,
+      "canSupportThreadedTextureMailbox": false,
+      "directRenderingVersion": "",
+      "displayType": "ANGLE_METAL",
+      "glExtensions": "GL_AMD_performance_monitor GL_ANGLE_base_vertex_base_instance_shader_builtin GL_ANGLE_blob_cache GL_ANGLE_client_arrays GL_ANGLE_clip_cull_distance GL_ANGLE_compressed_texture_etc GL_ANGLE_depth_texture GL_ANGLE_framebuffer_blit GL_ANGLE_framebuffer_multisample GL_ANGLE_get_serialized_context_string GL_ANGLE_get_tex_level_parameter GL_ANGLE_instanced_arrays GL_ANGLE_memory_size GL_ANGLE_pack_reverse_row_order GL_ANGLE_polygon_mode GL_ANGLE_program_binary_readiness_query GL_ANGLE_program_cache_control GL_ANGLE_provoking_vertex GL_ANGLE_renderability_validation GL_ANGLE_request_extension GL_ANGLE_rgbx_internal_format GL_ANGLE_robust_client_memory GL_ANGLE_shader_pixel_local_storage GL_ANGLE_shader_pixel_local_storage_coherent GL_ANGLE_stencil_texturing GL_ANGLE_texture_compression_dxt3 GL_ANGLE_texture_compression_dxt5 GL_ANGLE_texture_multisample GL_ANGLE_translated_shader_source GL_APPLE_clip_distance GL_ARM_rgba8 GL_CHROMIUM_bind_generates_resource GL_CHROMIUM_bind_uniform_location GL_CHROMIUM_copy_texture GL_CHROMIUM_lose_context GL_EXT_base_instance GL_EXT_blend_func_extended GL_EXT_blend_minmax GL_EXT_clip_control GL_EXT_color_buffer_float GL_EXT_color_buffer_half_float GL_EXT_compressed_ETC1_RGB8_sub_texture GL_EXT_conservative_depth GL_EXT_debug_label GL_EXT_debug_marker GL_EXT_depth_clamp GL_EXT_discard_framebuffer GL_EXT_disjoint_timer_query GL_EXT_draw_buffers GL_EXT_draw_buffers_indexed GL_EXT_draw_elements_base_vertex GL_EXT_float_blend GL_EXT_frag_depth GL_EXT_instanced_arrays GL_EXT_map_buffer_range GL_EXT_multisampled_render_to_texture GL_EXT_occlusion_query_boolean GL_EXT_polygon_offset_clamp GL_EXT_pvrtc_sRGB GL_EXT_read_format_bgra GL_EXT_render_snorm GL_EXT_robustness GL_EXT_sRGB GL_EXT_shader_texture_lod GL_EXT_texture_compression_bptc GL_EXT_texture_compression_dxt1 GL_EXT_texture_compression_rgtc GL_EXT_texture_compression_s3tc_srgb GL_EXT_texture_filter_anisotropic GL_EXT_texture_format_BGRA8888 GL_EXT_texture_mirror_clamp_to_edge GL_EXT_texture_norm16 GL_EXT_texture_rg GL_EXT_texture_sRGB_R8 GL_EXT_texture_sRGB_RG8 GL_EXT_texture_shadow_lod GL_EXT_texture_storage GL_IMG_texture_compression_pvrtc GL_KHR_debug GL_KHR_parallel_shader_compile GL_KHR_robustness GL_KHR_texture_compression_astc_hdr GL_KHR_texture_compression_astc_ldr GL_KHR_texture_compression_astc_sliced_3d GL_MESA_framebuffer_flip_y GL_NV_fence GL_NV_framebuffer_blit GL_NV_pixel_buffer_object GL_NV_shader_noperspective_interpolation GL_OES_EGL_image GL_OES_EGL_sync GL_OES_compressed_ETC1_RGB8_texture GL_OES_depth24 GL_OES_depth32 GL_OES_depth_texture GL_OES_draw_buffers_indexed GL_OES_draw_elements_base_vertex GL_OES_element_index_uint GL_OES_fbo_render_mipmap GL_OES_get_program_binary GL_OES_mapbuffer GL_OES_packed_depth_stencil GL_OES_required_internalformat GL_OES_rgb8_rgba8 GL_OES_sample_variables GL_OES_shader_multisample_interpolation GL_OES_standard_derivatives GL_OES_surfaceless_context GL_OES_texture_3D GL_OES_texture_float GL_OES_texture_float_linear GL_OES_texture_half_float GL_OES_texture_half_float_linear GL_OES_texture_npot GL_OES_texture_stencil8 GL_OES_vertex_array_object GL_QCOM_render_shared_exponent ",
+      "glImplementationParts": "(gl=egl-angle,angle=metal)",
+      "glRenderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Version 27.0 (Build 26A428))",
+      "glResetNotificationStrategy": 33362,
+      "glVendor": "Google Inc. (Apple)",
+      "glVersion": "OpenGL ES 3.0 (ANGLE 2.1.28654 git hash: ed04c8113c65)",
+      "glWsExtensions": "",
+      "glWsVendor": "",
+      "glWsVersion": "",
+      "inProcessGpu": false,
+      "initializationTime": 0.040234,
+      "isAsan": false,
+      "isClangCoverage": false,
+      "jpegDecodeAcceleratorSupported": false,
+      "maxMsaaSamples": "4",
+      "optimus": false,
+      "passthroughCmdDecoder": true,
+      "pixelShaderVersion": "3.00",
+      "processCrashCount": 0,
+      "sandboxed": true,
+      "skiaBackendType": "GraphiteDawnMetal",
+      "subpixelFontRendering": true,
+      "targetCpuBits": 64,
+      "vertexShaderVersion": "3.00",
+      "visibilityCallbackCallCount": 0
+    },
+    "featureStatus": {
+      "2d_canvas": "enabled",
+      "direct_rendering_display_compositor": "disabled_off_ok",
+      "gpu_compositing": "enabled",
+      "multiple_raster_threads": "enabled_on",
+      "opengl": "enabled_on",
+      "rasterization": "enabled",
+      "raw_draw": "disabled_off_ok",
+      "skia_graphite": "enabled_on",
+      "trees_in_viz": "disabled_off",
+      "video_decode": "enabled",
+      "video_encode": "enabled",
+      "webgl": "enabled",
+      "webgpu": "enabled",
+      "webnn": "disabled_off"
+    },
+    "driverBugWorkarounds": [
+      "disable_2d_canvas_auto_flush",
+      "enable_webgl_timer_query_extensions",
+      "disabled_extension_GL_KHR_blend_equation_advanced",
+      "disabled_extension_GL_KHR_blend_equation_advanced_coherent"
+    ],
+    "videoDecoding": [],
+    "videoEncoding": []
+  },
+  "results": [
+    {
+      "count": 100,
+      "cache": {
+        "entries": 0,
+        "pixels": 0
+      },
+      "frames": 194,
+      "elapsedMs": 4033.2,
+      "fps": 48.10076366160865,
+      "frameP95Ms": 33.40000000000009,
+      "drawMedianMs": 1.199999988079071,
+      "drawP95Ms": 1.399999976158142,
+      "longFrames": 48,
+      "frameBudgetMs": 16.699999999999932,
+      "width": 1440,
+      "height": 900,
+      "dpr": 2,
+      "run": 1,
+      "rendererMainCpuPercent": 16.728793897202333,
+      "gpuProcessCpuPercent": 88.77642938360391,
+      "deviceGpuPercent": {
+        "mean": 59.9375,
+        "max": 65,
+        "samples": 16
+      }
+    },
+    {
+      "count": 500,
+      "cache": {
+        "entries": 0,
+        "pixels": 0
+      },
+      "frames": 108,
+      "elapsedMs": 4116.5,
+      "fps": 26.235879995141502,
+      "frameP95Ms": 116.69999999999891,
+      "drawMedianMs": 1.7000000476837158,
+      "drawP95Ms": 4.800000011920929,
+      "longFrames": 54,
+      "frameBudgetMs": 16.699999999999932,
+      "width": 1440,
+      "height": 900,
+      "dpr": 2,
+      "run": 1,
+      "rendererMainCpuPercent": 11.751162496455848,
+      "gpuProcessCpuPercent": 90.92109779608084,
+      "deviceGpuPercent": {
+        "mean": 65.875,
+        "max": 78,
+        "samples": 16
+      }
+    },
+    {
+      "count": 2000,
+      "cache": {
+        "entries": 0,
+        "pixels": 0
+      },
+      "frames": 89,
+      "elapsedMs": 4149.9000000000015,
+      "fps": 21.44629991084122,
+      "frameP95Ms": 183.40000000000146,
+      "drawMedianMs": 1.7999999523162842,
+      "drawP95Ms": 11.900000035762787,
+      "longFrames": 46,
+      "frameBudgetMs": 16.699999999999932,
+      "width": 1440,
+      "height": 900,
+      "dpr": 2,
+      "run": 1,
+      "rendererMainCpuPercent": 11.705205012649024,
+      "gpuProcessCpuPercent": 89.72943536790943,
+      "deviceGpuPercent": {
+        "mean": 64.0625,
+        "max": 79,
+        "samples": 16
+      }
+    },
+    {
+      "count": 100,
+      "cache": {
+        "entries": 0,
+        "pixels": 0
+      },
+      "frames": 191,
+      "elapsedMs": 4016.399999999998,
+      "fps": 47.55502439996019,
+      "frameP95Ms": 33.400000000001455,
+      "drawMedianMs": 1.199999988079071,
+      "drawP95Ms": 1.399999976158142,
+      "longFrames": 50,
+      "frameBudgetMs": 16.699999999999932,
+      "width": 1440,
+      "height": 900,
+      "dpr": 2,
+      "run": 2,
+      "rendererMainCpuPercent": 12.803556736382127,
+      "gpuProcessCpuPercent": 89.14258666388525,
+      "deviceGpuPercent": {
+        "mean": 62.0625,
+        "max": 66,
+        "samples": 16
+      }
+    },
+    {
+      "count": 500,
+      "cache": {
+        "entries": 0,
+        "pixels": 0
+      },
+      "frames": 108,
+      "elapsedMs": 4099.9000000000015,
+      "fps": 26.342105905022063,
+      "frameP95Ms": 116.59999999999854,
+      "drawMedianMs": 1.7000000476837158,
+      "drawP95Ms": 4.900000035762787,
+      "longFrames": 56,
+      "frameBudgetMs": 16.699999999999932,
+      "width": 1440,
+      "height": 900,
+      "dpr": 2,
+      "run": 2,
+      "rendererMainCpuPercent": 11.361315547885692,
+      "gpuProcessCpuPercent": 90.56430195291955,
+      "deviceGpuPercent": {
+        "mean": 64.9375,
+        "max": 74,
+        "samples": 16
+      }
+    },
+    {
+      "count": 2000,
+      "cache": {
+        "entries": 0,
+        "pixels": 0
+      },
+      "frames": 88,
+      "elapsedMs": 4149.800000000003,
+      "fps": 21.205841245361206,
+      "frameP95Ms": 166.60000000000582,
+      "drawMedianMs": 1.800000011920929,
+      "drawP95Ms": 12.900000035762787,
+      "longFrames": 45,
+      "frameBudgetMs": 16.699999999999932,
+      "width": 1440,
+      "height": 900,
+      "dpr": 2,
+      "run": 2,
+      "rendererMainCpuPercent": 11.629414714494715,
+      "gpuProcessCpuPercent": 89.86878238630905,
+      "deviceGpuPercent": {
+        "mean": 65.4375,
+        "max": 86,
+        "samples": 16
+      }
+    },
+    {
+      "count": 100,
+      "cache": {
+        "entries": 0,
+        "pixels": 0
+      },
+      "frames": 192,
+      "elapsedMs": 4016.5,
+      "fps": 47.80281339474667,
+      "frameP95Ms": 33.400000000001455,
+      "drawMedianMs": 1.199999988079071,
+      "drawP95Ms": 1.399999976158142,
+      "longFrames": 49,
+      "frameBudgetMs": 16.699999999999932,
+      "width": 1440,
+      "height": 900,
+      "dpr": 2,
+      "run": 3,
+      "rendererMainCpuPercent": 12.120875389671406,
+      "gpuProcessCpuPercent": 90.3320625734646,
+      "deviceGpuPercent": {
+        "mean": 60.6875,
+        "max": 67,
+        "samples": 16
+      }
+    },
+    {
+      "count": 500,
+      "cache": {
+        "entries": 0,
+        "pixels": 0
+      },
+      "frames": 105,
+      "elapsedMs": 4083.199999999997,
+      "fps": 25.715125391849547,
+      "frameP95Ms": 116.60000000000582,
+      "drawMedianMs": 1.699999988079071,
+      "drawP95Ms": 4.899999976158142,
+      "longFrames": 56,
+      "frameBudgetMs": 16.699999999999932,
+      "width": 1440,
+      "height": 900,
+      "dpr": 2,
+      "run": 3,
+      "rendererMainCpuPercent": 11.243065578535747,
+      "gpuProcessCpuPercent": 90.8964512597572,
+      "deviceGpuPercent": {
+        "mean": 65.125,
+        "max": 77,
+        "samples": 16
+      }
+    },
+    {
+      "count": 2000,
+      "cache": {
+        "entries": 0,
+        "pixels": 0
+      },
+      "frames": 87,
+      "elapsedMs": 4033.100000000006,
+      "fps": 21.571495871661966,
+      "frameP95Ms": 149.89999999999418,
+      "drawMedianMs": 1.800000011920929,
+      "drawP95Ms": 12.299999952316284,
+      "longFrames": 46,
+      "frameBudgetMs": 16.699999999999932,
+      "width": 1440,
+      "height": 900,
+      "dpr": 2,
+      "run": 3,
+      "rendererMainCpuPercent": 13.145850309510134,
+      "gpuProcessCpuPercent": 88.07637545807357,
+      "deviceGpuPercent": {
+        "mean": 65.875,
+        "max": 94,
+        "samples": 16
+      }
+    }
+  ],
+  "physics": [
+    {
+      "count": 100,
+      "tickMedianMs": 0,
+      "tickP95Ms": 0.10000002384185791
+    },
+    {
+      "count": 500,
+      "tickMedianMs": 0.8999999761581421,
+      "tickP95Ms": 1
+    },
+    {
+      "count": 2000,
+      "tickMedianMs": 4.199999988079071,
+      "tickP95Ms": 4.5
+    }
+  ]
+}

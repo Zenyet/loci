@@ -2,6 +2,7 @@ import { colorCss, colorHex, mixHex } from '../../services/color';
 import type { Camera, GroupColor, GraphEdge, GraphNode } from "../../types";
 import { FaviconCache } from "./faviconCache";
 import { convexHull, inflateHull, pathSmoothBlob } from "./hull";
+import type { RenderSpriteCache } from "./spriteCache";
 
 export interface RenderState {
   nodes: GraphNode[];
@@ -34,6 +35,7 @@ export interface RenderState {
   hoverProgress?: number;
   nodeOpacity?: ReadonlyMap<string, number>;
   textCache: RenderTextCache;
+  spriteCache?: RenderSpriteCache;
 }
 
 export interface Theme {
@@ -45,7 +47,9 @@ export interface Theme {
 
 const MAX_CANVAS_DPR = 2;
 const MAX_BACKING_PIXELS = 6_000_000;
-const DETAIL_LABEL_SCALE = 0.3;
+// Below this scale 14px titles become <10px and mostly overlap. Keep the
+// focused/hovered labels, but don't rasterize unreadable text for the overview.
+const DETAIL_LABEL_SCALE = 0.7;
 const DETAIL_URL_SCALE = 0.82; // retained for detail struct; subtitle now hover-driven
 const DETAIL_FAVICON_SCALE = 0.3;
 const DETAIL_MONOGRAM_SCALE = 0.3;
@@ -75,7 +79,7 @@ export class RenderTextCache {
     if (cached !== undefined) return cached;
     const width = ctx.measureText(text).width;
     this.widths.set(key, width);
-    if (this.widths.size > 5000) this.widths.clear();
+    if (this.widths.size > 5000) this.widths.delete(this.widths.keys().next().value!);
     return width;
   }
 
@@ -90,7 +94,7 @@ export class RenderTextCache {
 
     const value = ellipsizeMeasured(ctx, text, maxWidth);
     this.ellipsis.set(key, value);
-    if (this.ellipsis.size > 5000) this.ellipsis.clear();
+    if (this.ellipsis.size > 5000) this.ellipsis.delete(this.ellipsis.keys().next().value!);
     return value;
   }
 
@@ -100,7 +104,7 @@ export class RenderTextCache {
 
     const value = displayUrl(url);
     this.urls.set(url, value);
-    if (this.urls.size > 5000) this.urls.clear();
+    if (this.urls.size > 5000) this.urls.delete(this.urls.keys().next().value!);
     return value;
   }
 }
@@ -113,10 +117,10 @@ export function resizeCanvas(
   const rawDpr = window.devicePixelRatio || 1;
   const cssPixels = Math.max(1, cssWidth * cssHeight);
   const budgetDpr = Math.sqrt(MAX_BACKING_PIXELS / cssPixels);
-  const dpr = Math.max(1, Math.min(rawDpr, MAX_CANVAS_DPR, budgetDpr));
+  const dpr = Math.min(rawDpr, MAX_CANVAS_DPR, budgetDpr);
   // Assigning even an unchanged size clears the canvas backing store.
-  const width = Math.round(cssWidth * dpr);
-  const height = Math.round(cssHeight * dpr);
+  const width = Math.floor(cssWidth * dpr);
+  const height = Math.floor(cssHeight * dpr);
   if (canvas.width !== width) canvas.width = width;
   if (canvas.height !== height) canvas.height = height;
   canvas.style.width = `${cssWidth}px`;
@@ -143,18 +147,19 @@ export function drawGraph(
   theme: Theme,
   size: { width: number; height: number; dpr: number },
 ): void {
+  state.spriteCache?.beginFrame();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, size.width * size.dpr, size.height * size.dpr);
   applyCamera(ctx, camera, size.width, size.height, size.dpr);
   const bounds = visibleWorldBounds(camera, size, 96);
-  const detail = detailForScale(camera.scale);
+  const detail = detailForScale(camera.scale, state.nodes.length);
 
   // Group highlight sits behind everything so nodes + edges remain readable.
   if (state.highlightGroupId) drawGroupHighlight(ctx, state);
   if (state.showEdges !== false) drawEdges(ctx, state, state.nodeById, bounds);
   if (state.ghost) drawGhost(ctx, state.ghost, theme);
-  drawNodes(ctx, state, theme, bounds, detail);
-  if (detail.labels) drawLabels(ctx, state, theme, bounds);
+  drawNodes(ctx, state, theme, bounds, detail, camera.scale * size.dpr);
+  drawLabels(ctx, state, theme, bounds, camera.scale * size.dpr, detail.labels);
 }
 
 function visibleWorldBounds(
@@ -172,9 +177,9 @@ function visibleWorldBounds(
   };
 }
 
-function detailForScale(scale: number): RenderDetail {
+function detailForScale(scale: number, nodeCount: number): RenderDetail {
   return {
-    labels: scale >= DETAIL_LABEL_SCALE,
+    labels: scale >= DETAIL_LABEL_SCALE || nodeCount < 200,
     urls: scale >= DETAIL_URL_SCALE,
     favicons: scale >= DETAIL_FAVICON_SCALE,
     monograms: scale >= DETAIL_MONOGRAM_SCALE,
@@ -315,16 +320,20 @@ export interface EdgeStyle {
   dash: number[];
 }
 
+const HOVER_EDGE_STYLE: EdgeStyle = { lineWidth: 2.5, alphaMul: 1, dash: [] };
+const AUTO_EDGE_STYLE: EdgeStyle = { lineWidth: 1.3, alphaMul: 0.5, dash: [] };
+const MANUAL_EDGE_STYLE: EdgeStyle = { lineWidth: 1.9, alphaMul: 0.75, dash: [] };
+
 /** Visual weight per edge kind. Hover always wins with a solid, prominent line. */
 export function edgeStyleFor(
   kind: GraphEdge["kind"],
   isHover: boolean,
 ): EdgeStyle {
-  if (isHover) return { lineWidth: 2.5, alphaMul: 1, dash: [] };
+  if (isHover) return HOVER_EDGE_STYLE;
   // Auto edges are the graph's connective web — solid and clearly visible,
   // just lighter than a user's explicit manual link.
-  if (kind === "auto") return { lineWidth: 1.3, alphaMul: 0.5, dash: [] };
-  return { lineWidth: 1.9, alphaMul: 0.75, dash: [] };
+  if (kind === "auto") return AUTO_EDGE_STYLE;
+  return MANUAL_EDGE_STYLE;
 }
 
 function drawEdges(
@@ -333,6 +342,7 @@ function drawEdges(
   byId: Map<string, GraphNode>,
   bounds: WorldBounds,
 ): void {
+  ctx.setLineDash([]);
   for (const e of state.edges) {
     const a = byId.get(e.from);
     const b = byId.get(e.to);
@@ -354,18 +364,21 @@ function drawEdges(
     const style = edgeStyleFor(e.kind, isHover);
     const alpha = Math.sqrt(aAlpha * bAlpha) * style.alphaMul;
 
-    const grad = ctx.createLinearGradient(a.x, a.y, b.x, b.y);
-    grad.addColorStop(0, hueString(hueForNode(a, state.topicHueById)));
-    grad.addColorStop(1, hueString(hueForNode(b, state.topicHueById)));
+    const fromHue = hueForNode(a, state.topicHueById);
+    const toHue = hueForNode(b, state.topicHueById);
+    if (fromHue === toHue) ctx.strokeStyle = hueString(fromHue);
+    else {
+      const grad = ctx.createLinearGradient(a.x, a.y, b.x, b.y);
+      grad.addColorStop(0, hueString(fromHue));
+      grad.addColorStop(1, hueString(toHue));
+      ctx.strokeStyle = grad;
+    }
     ctx.globalAlpha = alpha;
-    ctx.strokeStyle = grad;
     ctx.lineWidth = style.lineWidth;
-    ctx.setLineDash(style.dash);
     ctx.beginPath();
     ctx.moveTo(a.x, a.y);
     ctx.lineTo(b.x, b.y);
     ctx.stroke();
-    ctx.setLineDash([]);
 
     if (isHover && e.label) {
       const mx = (a.x + b.x) / 2;
@@ -549,12 +562,77 @@ function drawFolderTile(
   ctx.restore();
 }
 
+function drawFolderBadge(
+  ctx: CanvasRenderingContext2D,
+  n: GraphNode,
+  state: RenderState,
+  isDark: boolean,
+): void {
+  const half = n.radius;
+  const hue = hueForNode(n, state.topicHueById);
+  const count = String(n.bookmarkCount ?? 0);
+  const badgeX = n.x + half * 0.74;
+  const badgeY = n.y - half * 0.74;
+  const badgeHeight = 21;
+  ctx.font = '500 12px -apple-system, BlinkMacSystemFont, sans-serif';
+  const badgeWidth = Math.max(badgeHeight, state.textCache.width(ctx, count) + 10);
+  // A quiet notification-style badge: circular for one digit, a capsule
+  // for larger totals. Keep the exact count rather than truncating it.
+  ctx.shadowColor = 'rgba(0,0,0,.16)';
+  ctx.shadowBlur = 5;
+  ctx.shadowOffsetY = 1;
+  ctx.fillStyle = typeof hue === 'string' ? mixHex(hue, isDark ? 255 : 0, .8) : hueString(hue, isDark ? 87 : 37, 0.035);
+  ctx.beginPath();
+  ctx.roundRect(badgeX - badgeWidth / 2, badgeY - badgeHeight / 2, badgeWidth, badgeHeight, badgeHeight / 2);
+  ctx.fill();
+  ctx.shadowColor = 'transparent';
+  ctx.shadowBlur = 0;
+  ctx.shadowOffsetY = 0;
+  ctx.strokeStyle = isDark ? 'rgba(38,40,46,.9)' : 'rgba(255,254,252,.95)';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  ctx.fillStyle = isDark ? '#242830' : '#fff';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(count, badgeX, badgeY + .5);
+}
+
+function drawBookmarkNode(
+  ctx: CanvasRenderingContext2D,
+  n: GraphNode,
+  state: RenderState,
+  detail: RenderDetail,
+  img: HTMLImageElement | null,
+  alpha: number,
+): void {
+  const half = n.radius;
+  if (img) {
+    const s = half * 1.75; // large and clear, constant size
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.shadowColor = "oklch(0 0 0 / 0.3)";
+    ctx.shadowBlur = half * 0.6;
+    ctx.shadowOffsetY = half * 0.18;
+    try {
+      ctx.drawImage(img, n.x - s / 2, n.y - s / 2, s, s);
+      ctx.restore();
+    } catch {
+      ctx.restore();
+      state.favicons.markBroken(n.url);
+      if (detail.monograms) drawNodeAvatar(ctx, n, half, alpha);
+    }
+  } else if (detail.monograms) {
+    drawNodeAvatar(ctx, n, half, alpha);
+  }
+}
+
 function drawNodes(
   ctx: CanvasRenderingContext2D,
   state: RenderState,
   theme: Theme,
   bounds: WorldBounds,
   detail: RenderDetail,
+  pixelScale: number,
 ): void {
   const isDark = oklchLightness(theme.bg) < 0.5;
   for (const n of state.nodes) {
@@ -569,34 +647,20 @@ function drawNodes(
       const hue = hueForNode(n, state.topicHueById);
       ctx.save();
       ctx.globalAlpha = alpha;
-      drawFolderTile(ctx, n.x, n.y, half, hue, isDark);
-
+      const extent = half * 1.55;
+      const cached = state.spriteCache?.draw(ctx, `folder|${half}|${hue}|${isDark}`,
+        n.x, n.y, { x: -extent, y: -extent, width: extent * 2, height: extent * 2 }, pixelScale,
+        target => drawFolderTile(target, 0, 0, half, hue, isDark));
+      if (!cached) drawFolderTile(ctx, n.x, n.y, half, hue, isDark);
       if (detail.labels) {
         const count = String(n.bookmarkCount ?? 0);
-        const badgeX = n.x + half * 0.74;
-        const badgeY = n.y - half * 0.74;
-        const badgeHeight = 21;
         ctx.font = '500 12px -apple-system, BlinkMacSystemFont, sans-serif';
-        const badgeWidth = Math.max(badgeHeight, state.textCache.width(ctx, count) + 10);
-        // A quiet notification-style badge: circular for one digit, a capsule
-        // for larger totals. Keep the exact count rather than truncating it.
-        ctx.shadowColor = 'rgba(0,0,0,.16)';
-        ctx.shadowBlur = 5;
-        ctx.shadowOffsetY = 1;
-        ctx.fillStyle = typeof hue === 'string' ? mixHex(hue, isDark ? 255 : 0, .8) : hueString(hue, isDark ? 87 : 37, 0.035);
-        ctx.beginPath();
-        ctx.roundRect(badgeX - badgeWidth / 2, badgeY - badgeHeight / 2, badgeWidth, badgeHeight, badgeHeight / 2);
-        ctx.fill();
-        ctx.shadowColor = 'transparent';
-        ctx.shadowBlur = 0;
-        ctx.shadowOffsetY = 0;
-        ctx.strokeStyle = isDark ? 'rgba(38,40,46,.9)' : 'rgba(255,254,252,.95)';
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-        ctx.fillStyle = isDark ? '#242830' : '#fff';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(count, badgeX, badgeY + .5);
+        const width = Math.max(21, state.textCache.width(ctx, count) + 10) + 16;
+        const badgeX = half * .74, badgeY = -half * .74;
+        const badge = state.spriteCache?.draw(ctx, `badge|${hue}|${isDark}|${count}`,
+          n.x + badgeX, n.y + badgeY, { x: -width / 2, y: -19, width, height: 40 }, pixelScale,
+          target => drawFolderBadge(target, { ...n, x: -badgeX, y: -badgeY }, state, isDark));
+        if (!badge) drawFolderBadge(ctx, n, state, isDark);
       }
       ctx.restore();
       continue;
@@ -605,24 +669,13 @@ function drawNodes(
     // Bookmark node: the favicon IS the node — no frame, no disc. A soft drop
     // shadow lifts it off the canvas; the site's own icon colors carry it.
     const img = detail.favicons ? state.favicons.get(n.url) : null;
-    if (img) {
-      const s = half * 1.75; // large and clear, constant size
-      ctx.save();
-      ctx.globalAlpha = alpha;
-      ctx.shadowColor = "oklch(0 0 0 / 0.3)";
-      ctx.shadowBlur = half * 0.6;
-      ctx.shadowOffsetY = half * 0.18;
-      try {
-        ctx.drawImage(img, n.x - s / 2, n.y - s / 2, s, s);
-        ctx.restore();
-      } catch {
-        ctx.restore();
-        state.favicons.markBroken(n.url);
-        if (detail.monograms) drawNodeAvatar(ctx, n, half, alpha);
-      }
-    } else if (detail.monograms) {
-      drawNodeAvatar(ctx, n, half, alpha);
-    }
+    ctx.globalAlpha = alpha;
+    const extent = half * 1.6;
+    const iconKey = img ? `image|${state.spriteCache?.sourceId(img)}` : `avatar|${n.url}|${n.letter}`;
+    const cached = state.spriteCache?.draw(ctx, `${iconKey}|${half}`, n.x, n.y,
+      { x: -extent, y: -extent, width: extent * 2, height: extent * 2 }, pixelScale,
+      target => drawBookmarkNode(target, { ...n, x: 0, y: 0 }, state, detail, img, 1));
+    if (!cached) drawBookmarkNode(ctx, n, state, detail, img, alpha);
 
     // Pin indicator: small group-hue dot at the top-right.
     if (isPinned) {
@@ -637,63 +690,71 @@ function drawNodes(
   ctx.globalAlpha = 1;
 }
 
+function drawLabelPlate(
+  ctx: CanvasRenderingContext2D,
+  material: ReturnType<typeof labelMaterial>,
+  x: number, y: number, width: number, height: number,
+): void {
+  ctx.shadowColor = 'rgba(0,0,0,.08)';
+  ctx.shadowBlur = 4;
+  ctx.shadowOffsetY = 1;
+  ctx.fillStyle = material.background;
+  ctx.beginPath();
+  ctx.roundRect(x - width / 2, y - 4, width, height, 7);
+  ctx.fill();
+  ctx.shadowColor = 'transparent';
+  ctx.shadowBlur = 0;
+  ctx.shadowOffsetY = 0;
+  ctx.strokeStyle = material.border;
+  ctx.lineWidth = .7;
+  ctx.stroke();
+}
+
 function drawLabels(
   ctx: CanvasRenderingContext2D,
   state: RenderState,
   theme: Theme,
   bounds: WorldBounds,
+  pixelScale: number,
+  showAll: boolean,
 ): void {
   const material = labelMaterial(theme.bg);
-  const drawPlate = (x: number, y: number, width: number, height: number) => {
-    ctx.shadowColor = 'rgba(0,0,0,.08)';
-    ctx.shadowBlur = 4;
-    ctx.shadowOffsetY = 1;
-    ctx.fillStyle = material.background;
-    ctx.beginPath();
-    ctx.roundRect(x - width / 2, y - 4, width, height, 7);
-    ctx.fill();
-    ctx.shadowColor = 'transparent';
-    ctx.shadowBlur = 0;
-    ctx.shadowOffsetY = 0;
-    ctx.strokeStyle = material.border;
-    ctx.lineWidth = .7;
-    ctx.stroke();
-  };
   for (const n of state.nodes) {
+    if (!showAll && n.id !== state.hoverNodeId && n.id !== state.draggingId &&
+        !state.filterMatches?.has(n.id) && !state.focusNeighborhood?.has(n.id)) continue;
     if (!nodeIntersects(n, bounds, 180)) continue;
     const isGroup = n.nodeKind === "group";
-    const alpha = nodeAlpha(state, n.id);
     const maxWidth = isGroup ? 140 : 170;
     const y = n.y + n.radius + 7;
-
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "top";
-
-    // A bounded translucent surface gives normal-weight text a predictable
-    // local background, without sampling images or blurring on every frame.
+    ctx.globalAlpha = nodeAlpha(state, n.id);
     ctx.font = '400 14px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif';
     const title = state.textCache.ellipsize(ctx, n.name, maxWidth);
     const titleWidth = state.textCache.width(ctx, title);
-    drawPlate(n.x, y, titleWidth + 14, 23);
-    ctx.fillStyle = material.foreground;
-    ctx.fillText(title, n.x, y);
-
-    // Domain subtitle: only for the hovered bookmark, to avoid clutter.
+    let sub = '';
+    let subWidth = 0;
     if (!isGroup && n.id === state.hoverNodeId) {
-      const uy = y + 26;
       ctx.font = '400 11px -apple-system, BlinkMacSystemFont, sans-serif';
-      const sub = state.textCache.ellipsize(
-        ctx,
-        state.textCache.displayUrl(n.url),
-        maxWidth,
-      );
-      drawPlate(n.x, uy, state.textCache.width(ctx, sub) + 12, 20);
-      ctx.fillStyle = material.secondary;
-      ctx.fillText(sub, n.x, uy);
+      sub = state.textCache.ellipsize(ctx, state.textCache.displayUrl(n.url), maxWidth);
+      subWidth = state.textCache.width(ctx, sub);
     }
-    ctx.restore();
+    const paint = (target: CanvasRenderingContext2D, x = 0, top = 0) => {
+      target.textAlign = 'center';
+      target.textBaseline = 'top';
+      target.font = '400 14px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif';
+      drawLabelPlate(target, material, x, top, titleWidth + 14, 23);
+      target.fillStyle = material.foreground;
+      target.fillText(title, x, top);
+      if (sub) {
+        target.font = '400 11px -apple-system, BlinkMacSystemFont, sans-serif';
+        drawLabelPlate(target, material, x, top + 26, subWidth + 12, 20);
+        target.fillStyle = material.secondary;
+        target.fillText(sub, x, top + 26);
+      }
+    };
+    const width = Math.max(titleWidth + 14, subWidth + 12) + 16;
+    const cached = state.spriteCache?.draw(ctx, `label|${material.background}|${title}|${sub}`,
+      n.x, y, { x: -width / 2, y: -12, width, height: sub ? 66 : 40 }, pixelScale, paint);
+    if (!cached) paint(ctx, n.x, y);
   }
   ctx.globalAlpha = 1;
 }

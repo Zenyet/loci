@@ -113,7 +113,9 @@ export function useGraphSimCustom({
     node.fy = wy;
     const engine = engineRef.current;
     if (engine) {
-      engine.alphaTarget(0.3);
+      // Pointer movement supplies heat. Holding a node still must eventually
+      // let the simulation sleep instead of running forever at alphaTarget .3.
+      engine.alphaTarget(0);
       if (engine.alpha() < 0.3) engine.alpha(0.3);
     }
   }, []);
@@ -123,8 +125,11 @@ export function useGraphSimCustom({
     if (!id) return;
     const node = nodesRef.current.find((n) => n.id === id);
     if (!node) return;
+    if (node.fx === wx && node.fy === wy) return;
     node.fx = wx;
     node.fy = wy;
+    const engine = engineRef.current;
+    if (engine && engine.alpha() < 0.3) engine.alpha(0.3);
   }, []);
 
   const endDrag = useCallback((pinInsteadOfRelease: boolean) => {

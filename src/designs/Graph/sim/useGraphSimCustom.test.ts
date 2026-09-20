@@ -30,6 +30,27 @@ describe('radiusFor', () => {
 
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
+it('cools while a drag is held still and reheats when that node moves again', () => {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  const bookmarks: GraphItem[] = [{ id: 'a', parentId: '', name: 'A', url: '', group: '', color: '', letter: 'A', visits: 0, last: '' }];
+  let sim!: GraphSim;
+  function Harness() { sim = useGraphSimCustom({ bookmarks, groups: [], edges: [], pins: {} }); return null; }
+  const root = createRoot(document.createElement('div'));
+  act(() => root.render(createElement(Harness)));
+  try {
+    sim.startDrag('a', 20, 30);
+    for (let i = 0; i < 400; i++) sim.simulationRef.current!.tick();
+    expect(sim.simulationRef.current!.alpha()).toBeLessThan(.003);
+    sim.dragTo(20, 30);
+    expect(sim.simulationRef.current!.alpha()).toBeLessThan(.003);
+    sim.dragTo(80, 90);
+    expect(sim.simulationRef.current!.alpha()).toBeGreaterThanOrEqual(.3);
+    sim.simulationRef.current!.tick();
+    expect(sim.findById('a')).toMatchObject({ x: 80, y: 90 });
+    sim.endDrag(false);
+  } finally { act(() => root.unmount()); }
+});
+
 function settledCollection(hiddenFolders = 0, looseSites = 0, splitParents = false) {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   const groups: Group[] = Array.from({ length: 4 + hiddenFolders }, (_, i) => ({

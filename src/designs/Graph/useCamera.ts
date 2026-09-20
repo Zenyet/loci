@@ -122,7 +122,10 @@ export function useCamera(initial: Camera = { scale: 1, tx: 0, ty: 0 }, getHome?
       // can never zoom more than ~6% per tick.
       const raw = Math.exp(-delta * 0.0015);
       const factor = Math.max(0.94, Math.min(1.06, raw));
-      cameraRef.current = zoomAt(cameraRef.current, cameraRef.current.scale * factor, vx, vy, size);
+      const nextScale = clampScale(cameraRef.current.scale * factor);
+      // Wheel momentum at a zoom limit must not keep waking the renderer.
+      if (nextScale === cameraRef.current.scale) return;
+      cameraRef.current = zoomAt(cameraRef.current, nextScale, vx, vy, size);
       emit();
     },
     [emit, cancelAnim]

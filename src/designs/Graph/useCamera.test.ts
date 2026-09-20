@@ -1,5 +1,7 @@
-import { describe, it, expect } from 'vitest';
-import { viewToWorld, worldToView, clampScale, zoomAt, desktopCamera } from './useCamera';
+import { act, createElement } from 'react';
+import { createRoot } from 'react-dom/client';
+import { describe, it, expect, vi } from 'vitest';
+import { viewToWorld, worldToView, clampScale, zoomAt, desktopCamera, useCamera, type UseCamera } from './useCamera';
 
 const cam = { scale: 1, tx: 0, ty: 0 };
 const size = { width: 1000, height: 600 };
@@ -43,6 +45,27 @@ describe('zoomAt', () => {
     expect(wx).toBeCloseTo(wxStart, 3);
     expect(wy).toBeCloseTo(wyStart, 3);
   });
+});
+
+it('does not emit redraws for wheel momentum at the scale limit', () => {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  let camera!: UseCamera;
+  function Harness() { camera = useCamera({ scale: 3, tx: 20, ty: -30 }); return null; }
+  const root = createRoot(document.createElement('div'));
+  act(() => root.render(createElement(Harness)));
+  try {
+    const draw = vi.fn();
+    camera.subscribe(draw);
+    for (let i = 0; i < 100; i++) camera.wheelZoom(100 + i, 200, -40, size);
+    expect(draw).not.toHaveBeenCalled();
+    expect(camera.cameraRef.current).toEqual({ scale: 3, tx: 20, ty: -30 });
+    const anchor = viewToWorld(camera.cameraRef.current, 100, 200, size);
+    camera.wheelZoom(100, 200, 30, size);
+    expect(draw).toHaveBeenCalledOnce();
+    const nextAnchor = viewToWorld(camera.cameraRef.current, 100, 200, size);
+    expect(nextAnchor[0]).toBeCloseTo(anchor[0]);
+    expect(nextAnchor[1]).toBeCloseTo(anchor[1]);
+  } finally { act(() => root.unmount()); vi.unstubAllGlobals(); }
 });
 
 

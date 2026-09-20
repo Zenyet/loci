@@ -206,6 +206,26 @@ it('does not clear an unchanged canvas backing store on redundant resize notific
   widthSetter.mockRestore(); heightSetter.mockRestore();
 });
 
+it('enforces the backing pixel budget even on a CSS viewport larger than 6 megapixels', () => {
+  const canvas = document.createElement('canvas');
+  const dpr = resizeCanvas(canvas, 8000, 4000);
+  expect(dpr).toBeLessThan(1);
+  expect(canvas.width * canvas.height).toBeLessThanOrEqual(6_000_000);
+});
+
+it('keeps hovered and matching labels readable in a dense zoomed-out overview', () => {
+  const nodes = Array.from({ length: 200 }, (_, i) => ({ ...node, id: `${i}`, name: `Node ${i}`, x: i * 5 }));
+  const favicons = { get: () => readyFavicon() } as unknown as FaviconCache;
+  const state = { ...stateWithFavicons(favicons), nodes, nodeById: new Map(nodes.map(n => [n.id, n])),
+    hoverNodeId: '0', filterMatches: new Set(['1']) };
+  const ctx = createContext(vi.fn());
+  drawGraph(ctx, state, { scale: .3, tx: 0, ty: 0 }, theme, { width: 800, height: 600, dpr: 1 });
+  const labels = vi.mocked(ctx.fillText).mock.calls.map(args => args[0]);
+  expect(labels).toContain('Node 0');
+  expect(labels).toContain('Node 1');
+  expect(labels).not.toContain('Node 2');
+});
+
 describe('edgeStyleFor', () => {
   it('draws auto edges as a visible, solid connective web', () => {
     // Auto edges are now the primary connective tissue (every node joins one

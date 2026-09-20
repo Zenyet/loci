@@ -118,6 +118,48 @@ describe('Canvas modal isolation', () => {
 });
 
 describe('hover input scheduling', () => {
+  it('reads wheel layout once per frame and normalizes line and page deltas', async () => {
+    const canvas = container.querySelector('canvas')!;
+    const bounds = vi.mocked(canvas.getBoundingClientRect);
+    bounds.mockClear(); mocks.camera.wheelZoom.mockClear();
+    for (let i = 0; i < 100; i++) canvas.dispatchEvent(new WheelEvent('wheel', { deltaY: 2, deltaMode: 1 }));
+    expect(bounds).toHaveBeenCalledOnce();
+    expect(mocks.camera.wheelZoom).toHaveBeenLastCalledWith(0, 0, 32, { width: 1000, height: 600 });
+    // The real camera requests a frame on mutation; the mock needs a wakeup.
+    pointer(canvas, 'pointermove', 800, 300);
+    await flushFrame();
+    bounds.mockClear();
+    canvas.dispatchEvent(new WheelEvent('wheel', { deltaY: -1, deltaMode: 2 }));
+    expect(bounds).toHaveBeenCalledOnce();
+    expect(mocks.camera.wheelZoom).toHaveBeenLastCalledWith(0, 0, -600, { width: 1000, height: 600 });
+  });
+
+  it('sleeps with the pan button held still and wakes on the next movement', async () => {
+    const canvas = container.querySelector('canvas')!;
+    pointer(canvas, 'pointerdown', 800, 300);
+    pointer(canvas, 'pointermove', 810, 300);
+    await flushFrame();
+    expect(frames.size).toBe(0);
+    const draws = vi.mocked(drawGraph).mock.calls.length;
+    await flushFrame(1000);
+    expect(vi.mocked(drawGraph).mock.calls.length).toBe(draws);
+    pointer(canvas, 'pointermove', 820, 300);
+    await flushFrame();
+    expect(vi.mocked(drawGraph).mock.calls.length).toBe(draws + 1);
+    pointer(canvas, 'pointerup', 820, 300);
+  });
+
+  it('suspends hidden rendering and redraws once when the document becomes visible', async () => {
+    const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+    await act(async () => root.render(<GraphCanvas {...props} filterText="changed"/>));
+    expect(frames.size).toBe(0);
+    visibility.mockReturnValue('visible');
+    document.dispatchEvent(new Event('visibilitychange'));
+    expect(frames.size).toBe(1);
+    await flushFrame();
+    expect(frames.size).toBe(0);
+  });
+
   it('hit-tests only the latest pointer position once per frame', async () => {
     const canvas = container.querySelector('canvas')!;
     for (let i = 0; i < 100; i++) pointer(canvas, 'pointermove', 500 + i % 4, 300);

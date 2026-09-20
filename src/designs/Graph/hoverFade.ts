@@ -6,7 +6,7 @@ export function advanceHoverFade(
   elapsedMs: number,
   reducedMotion: boolean,
 ): boolean {
-  const visible = new Set(nodeIds);
+  const visible = nodeIds instanceof Set ? nodeIds : new Set(nodeIds);
   for (const id of opacity.keys()) if (!visible.has(id)) opacity.delete(id);
   let animating = false;
   const amount = 1 - Math.exp(-Math.max(0, elapsedMs) / 85);

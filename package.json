@@ -9,6 +9,7 @@
     "build": "tsc -b && vite build",
     "check": "npm run check:ui && npm run typecheck && npm test && npm run build",
     "check:ui": "node scripts/check-ui-controls.mjs",
+    "bench:canvas": "node scripts/bench-canvas.mjs",
     "package:extension": "npm run build && node scripts/package-extension.mjs",
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
