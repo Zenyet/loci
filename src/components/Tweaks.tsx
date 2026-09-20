@@ -70,7 +70,7 @@ const SECTIONS: {
     title: "通用",
     keywords: "行为 动效 连线 底栏 新标签页 打开方式",
   },
-  { id: "widgets", title: "小组件", keywords: "天气 城市 时间 时钟 日期 待办 小组件" },
+  { id: "widgets", title: "小组件", keywords: "天气 城市 时间 时钟 日期 日历 农历 节假日 调休 待办 小组件" },
   {
     id: "ai",
     title: "智能整理",
@@ -101,20 +101,14 @@ const ACCENTS = [
 const MAX_IMAGE_SIDE = 2400;
 const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
 
-function DesktopPreview({
-  settings,
-  compact = false,
-}: {
-  settings: Settings;
-  compact?: boolean;
-}) {
+function DesktopPreview({ settings }: { settings: Settings }) {
   const bg =
     settings.bg === "image" && settings.bgImage
       ? backgroundImageCssValue(settings.bgImage)
       : undefined;
   return (
     <div
-      className={`desktop-preview${compact ? " desktop-preview--compact" : ""}`}
+      className="desktop-preview"
       data-background={settings.bg}
       style={{ backgroundImage: bg }}
       aria-hidden="true"
@@ -501,7 +495,6 @@ export function Tweaks({
                 )}
                 {section === "wallpaper" && (
                   <>
-                    <DesktopPreview settings={settings} compact />
                     <SettingGroup title="背景风格">
                       <SettingRow title="显示方式">
                         <div
@@ -688,9 +681,7 @@ export function Tweaks({
                 {section === "search" && (
                   <>
                     <div className="settings-feature-note">
-                      <span className="settings-feature-symbol">
-                        <Icon name="search" size={23} />
-                      </span>
+                      <PreferenceIcon name="search" />
                       <div>
                         <strong>随想，随搜。</strong>
                         <p>

@@ -54,6 +54,7 @@ export interface WidgetSettings {
   clock: { enabled: boolean; hour12: boolean };
   weather: { enabled: boolean; city: WeatherCity | null; unit: 'celsius' | 'fahrenheit' };
   todos: { enabled: boolean };
+  calendar: { showLunar: boolean; showHolidays: boolean };
 }
 
 export interface GraphItem extends Bookmark {
@@ -198,6 +199,7 @@ export const DEFAULT_SETTINGS: Settings = {
     clock: { enabled: false, hour12: false },
     weather: { enabled: false, city: null, unit: 'celsius' },
     todos: { enabled: false },
+    calendar: { showLunar: true, showHolidays: true },
   },
   theme: "light",
   accentHue: 260,

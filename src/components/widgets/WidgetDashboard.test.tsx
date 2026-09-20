@@ -53,3 +53,28 @@ it('restores focus to the trigger after Escape', async () => {
   expect(container.querySelector('[role="dialog"]')).toBeNull();
   expect(document.activeElement?.getAttribute('aria-label')).toBe('查看今日待办');
 });
+
+it('keeps legacy clock and weather preferences together in one card', async () => {
+  const settings = patchWidgets(DEFAULT_SETTINGS.widgets, { clock: { enabled: true, hour12: true }, weather: { enabled: true }, order: ['weather', 'todos', 'clock'] });
+  await act(async () => root.render(<WidgetDashboard settings={settings} onChange={() => {}} onConfigure={() => {}} onPanelChange={panelChanged} blocked={false} />));
+  const card = container.querySelector('[aria-label="时间与天气"]')!;
+  expect(card.querySelector('time')).not.toBeNull();
+  expect(card.querySelector('[aria-label="查看天气"]')).not.toBeNull();
+  expect(container.querySelectorAll('[aria-label="时间与天气"]')).toHaveLength(1);
+  await click('查看天气');
+  expect(container.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe('天气详情');
+  expect(fetch).not.toHaveBeenCalled();
+});
+
+it('opens the calendar from the date even with clock/weather disabled, and restores focus when dismissed', async () => {
+  await render(); await click('查看日历');
+  expect(container.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe('日历');
+  expect(container.querySelector('[role="grid"]')).not.toBeNull();
+  expect(fetch).not.toHaveBeenCalled();
+  await click('关闭小组件');
+  expect(document.activeElement?.getAttribute('aria-label')).toBe('查看日历');
+  await click('查看日历');
+  await act(async () => container.querySelector('[role="dialog"]')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })));
+  expect(container.querySelector('[role="dialog"]')).toBeNull();
+  expect(document.activeElement?.getAttribute('aria-label')).toBe('查看日历');
+});

@@ -5,6 +5,7 @@ export type IconName =
   | "widgets"
   | "clock"
   | "weather"
+  | "location"
   | "todo"
   | "history"
   | "look"
@@ -51,6 +52,7 @@ export function Icon({
     widgets: <><rect x="3" y="3" width="7" height="7" rx="2" /><rect x="14" y="3" width="7" height="7" rx="2" /><rect x="3" y="14" width="7" height="7" rx="2" /><path d="M17.5 14v7M14 17.5h7" /></>,
     clock: <><circle cx="12" cy="12" r="8.5" /><path d="M12 7v5l3 2" /></>,
     weather: <><circle cx="9" cy="9" r="4" /><path d="M9 1v2M1 9h2M3.3 3.3l1.4 1.4M14.7 3.3l-1.4 1.4M8 20h10a3.5 3.5 0 1 0-.6-6.9A5 5 0 0 0 8 14a3 3 0 0 0 0 6Z" /></>,
+    location: <><circle cx="12" cy="12" r="7" /><circle cx="12" cy="12" r="2.5" /><path d="M12 2v3m0 14v3M2 12h3m14 0h3" /></>,
     todo: <><rect x="4" y="3" width="16" height="18" rx="3" /><path d="m8 9 1.5 1.5L12 8M14 9h2m-8 6 1.5 1.5L12 14m2 1h2" /></>,
     history: <><path d="M3.5 10a8.5 8.5 0 1 1 1.7 7.5M3.5 4.5V10H9" /><path d="M12 7.5V12l3 2" opacity=".7" /></>,
     more: <g fill="currentColor" stroke="none"><circle cx="5" cy="12" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="19" cy="12" r="1.5" /></g>,

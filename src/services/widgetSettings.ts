@@ -22,14 +22,24 @@ export function normalizeWidgets(raw: Partial<WidgetSettings> | undefined): Widg
       unit: raw?.weather?.unit === 'fahrenheit' ? 'fahrenheit' : 'celsius',
     },
     todos: { enabled: raw?.todos?.enabled === true },
+    calendar: {
+      showLunar: raw?.calendar?.showLunar !== false,
+      showHolidays: raw?.calendar?.showHolidays !== false,
+    },
   };
 }
 
-type WidgetPatch = { [K in WidgetId]?: Partial<WidgetSettings[K]> } & { order?: WidgetId[] };
+type WidgetPatch = { [K in WidgetId | 'calendar']?: Partial<WidgetSettings[K]> } & { order?: WidgetId[] };
+/** Keep legacy weather preferences, but display clock/weather as one card. */
+export function widgetCardOrder(settings: WidgetSettings): Exclude<WidgetId, 'weather'>[] {
+  return [...new Set(settings.order.map(id => id === 'weather' ? 'clock' : id))];
+}
+
 export function patchWidgets(current: WidgetSettings, patch: WidgetPatch): WidgetSettings {
   return normalizeWidgets({ ...current, ...patch,
     clock: { ...current.clock, ...patch.clock },
     weather: { ...current.weather, ...patch.weather },
     todos: { ...current.todos, ...patch.todos },
+    calendar: { ...current.calendar, ...patch.calendar },
   });
 }

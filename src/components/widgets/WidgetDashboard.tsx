@@ -4,11 +4,13 @@ import { useClock } from '../../hooks/useClock';
 import { useTodos } from '../../hooks/useTodos';
 import { useWeather } from '../../hooks/useWeather';
 import { useSurfaceDismiss } from '../../hooks/useSurfaceDismiss';
-import { patchWidgets } from '../../services/widgetSettings';
+import { patchWidgets, widgetCardOrder } from '../../services/widgetSettings';
 import { displayTemperature, requestWeatherPermission, weatherDescription, WEATHER_FRESH_MS, WEATHER_OLD_MS } from '../../services/weather';
 import { CityPicker } from './CityPicker';
 import { WeatherGlyph } from './WeatherGlyph';
 import { Icon } from '../Icon';
+import { CloseButton } from '../CloseButton';
+import { CalendarWidget } from './CalendarWidget';
 import './widgets.css';
 
 interface Props {
@@ -23,7 +25,7 @@ export function WidgetDashboard({ settings, onChange, onConfigure, onPanelChange
   const now = useClock();
   const weather = useWeather(settings.weather);
   const todos = useTodos();
-  const [open, setOpen] = useState<'weather' | 'todos' | null>(null);
+  const [open, setOpen] = useState<'calendar' | 'weather' | 'todos' | null>(null);
   const [choosingCity, setChoosingCity] = useState(false);
   const [draft, setDraft] = useState('');
   const [showDone, setShowDone] = useState(false);
@@ -43,7 +45,7 @@ export function WidgetDashboard({ settings, onChange, onConfigure, onPanelChange
 
   useEffect(() => { if (blocked) setOpen(null); }, [blocked]);
   useEffect(() => {
-    if (open && !settings[open].enabled) setOpen(null);
+    if (open && open !== 'calendar' && !settings[open].enabled) setOpen(null);
   }, [settings, open]);
   useEffect(() => { onPanelChange(!!open); return () => onPanelChange(false); }, [open, onPanelChange]);
   useEffect(() => {
@@ -68,26 +70,34 @@ export function WidgetDashboard({ settings, onChange, onConfigure, onPanelChange
     if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget as Node)) close();
   }}>
     <div className="widget-bar" aria-label="日常小组件" ref={element => { if (element) element.inert = blocked; }}>
-      {settings.order.map(id => {
-        if (id === 'clock') return <div className={`widget-clock${settings.clock.enabled ? ' is-enabled' : ''}`} key={id} aria-label="时间与日期">
-          <div className="widget-clock__content">
-          {settings.clock.enabled && <time className="widget-clock__time" dateTime={now.toISOString()}>{now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: settings.clock.hour12 })}</time>}
-          <span className="widget-clock__date">{now.toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' })}</span>
-          </div>
+      {widgetCardOrder(settings).map(id => {
+        if (id === 'clock') return <div className="widget-daily" key={id} role="group" aria-label="时间与天气" data-weather={settings.weather.enabled || undefined}>
+          <button type="button" className="widget-daily__clock" aria-label="查看日历" aria-expanded={open === 'calendar'} aria-controls={open === 'calendar' ? 'daily-widget-panel' : undefined} aria-haspopup="dialog" onClick={event => {
+            trigger.current = event.currentTarget; setOpen(current => current === 'calendar' ? null : 'calendar');
+          }}>
+            {settings.clock.enabled && <time className="widget-daily__time" dateTime={now.toISOString()}>{now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: settings.clock.hour12 })}</time>}
+            <time className="widget-daily__date" dateTime={now.toISOString()}>{now.toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' })}</time>
+          </button>
+          {settings.weather.enabled && <button type="button" className="widget-daily__weather" aria-label="查看天气" aria-expanded={open === 'weather'} aria-controls={open === 'weather' ? 'daily-widget-panel' : undefined} aria-haspopup="dialog" onClick={event => {
+            trigger.current = event.currentTarget; setChoosingCity(false); setOpen(current => current === 'weather' ? null : 'weather');
+          }}>
+            <span className="widget-daily__forecast"><WeatherGlyph code={data?.code ?? null} isDay={data?.isDay} size={30} /><strong>{data && !old ? displayTemperature(data.temperature) : '—'}</strong>{(stale || !!weather.error) && <span className="widget-stale-dot" title="天气待更新" />}</span>
+            <span className="widget-daily__city">{city?.name ?? '设置城市'}{data && !old ? ` · ${weatherDescription(data.code)}` : ''}</span>
+          </button>}
         </div>;
         if (!settings[id].enabled) return null;
-        return <button key={id} type="button" className="widget-summary" aria-label={id === 'weather' ? '查看天气' : '查看今日待办'} aria-expanded={open === id} aria-controls={open === id ? 'daily-widget-panel' : undefined} aria-haspopup="dialog" onClick={event => {
+        return <button key={id} type="button" className="widget-summary" aria-label="查看今日待办" aria-expanded={open === id} aria-controls={open === id ? 'daily-widget-panel' : undefined} aria-haspopup="dialog" onClick={event => {
           trigger.current = event.currentTarget; setChoosingCity(false); setOpen(current => current === id ? null : id);
         }}>
-          {id === 'weather' ? <><WeatherGlyph code={data?.code ?? null} isDay={data?.isDay} size={25} /><span>{city?.name ?? '选择城市'}</span><strong>{data && !old ? displayTemperature(data.temperature) : city ? '—' : ''}</strong>{(stale || !!weather.error) && <span className="widget-stale-dot" title="天气待更新" />}</> : <><Icon name="todo" size={18} /><span className="widget-todo-summary">{pending[0]?.text ?? '今日待办'}</span><strong className="widget-count">{pending.length}</strong></>}
+          <Icon name="todo" size={18} /><span className="widget-todo-summary">{pending[0]?.text ?? '今日待办'}</span><strong className="widget-count">{pending.length}</strong>
         </button>;
       })}
     </div>
     <button type="button" className="widget-add" aria-label="添加小组件" title="添加小组件" disabled={blocked} onClick={onConfigure}><Icon name="widgets" size={18} /></button>
 
-    {open && !blocked && <section ref={panel} tabIndex={-1} className={`widget-panel widget-panel--${open}`} id="daily-widget-panel" role="dialog" aria-label={open === 'weather' ? '天气详情' : '今日待办'}>
-      <header className="widget-panel__header"><span className="widget-eyebrow">{open === 'weather' ? '窗外的天气' : '留给今天的事'}</span><button type="button" aria-label="关闭小组件" onClick={() => close(true)}><Icon name="close" size={16} /></button></header>
-      {open === 'weather' ? <>
+    {open && !blocked && <section ref={panel} tabIndex={-1} className={`widget-panel widget-panel--${open}`} id="daily-widget-panel" role="dialog" aria-label={open === 'calendar' ? '日历' : open === 'weather' ? '天气详情' : '今日待办'}>
+      <header className="widget-panel__header"><span className="widget-eyebrow">{open === 'calendar' ? '日历 · 中国大陆' : open === 'weather' ? '窗外的天气' : '留给今天的事'}</span><CloseButton label="关闭小组件" onClick={() => close(true)} /></header>
+      {open === 'calendar' ? <CalendarWidget now={now} settings={settings.calendar} /> : open === 'weather' ? <>
         {!weather.permission ? <div className="widget-empty"><Icon name="weather" size={40} /><h2>连接天气服务</h2><p>允许连接 Open-Meteo，查看所选城市的天气。</p><button type="button" className="widget-primary" onClick={() => void allowWeather()}>允许连接</button>{permissionError && <p className="widget-error" role="alert">{permissionError}</p>}</div>
         : !city || choosingCity ? <div className="widget-city-setup"><h2>{city ? '换一座城市' : '你想看哪里的天气？'}</h2><CityPicker onSelect={next => { onChange(patchWidgets(settings, { weather: { city: next } })); setChoosingCity(false); }} />{city && <button type="button" className="widget-text-button" onClick={() => setChoosingCity(false)}>返回 {city.name}</button>}</div>
         : <>

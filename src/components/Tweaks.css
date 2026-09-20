@@ -208,11 +208,6 @@
   isolation: isolate;
   box-shadow: inset 0 0 0 1px #00000009;
 }
-.desktop-preview--compact {
-  height: 155px;
-  margin-bottom: 24px;
-  border-radius: 15px;
-}
 .desktop-preview[data-background="grid"] {
   background-image:
     linear-gradient(var(--line-soft) 1px, transparent 1px),
@@ -757,14 +752,9 @@
   border: 1px solid var(--settings-border);
   background: var(--settings-card);
 }
-.settings-feature-symbol {
+.settings-feature-note > .preference-icon {
   width: 42px;
   height: 42px;
-  display: grid;
-  place-items: center;
-  border-radius: 17px;
-  background: var(--accent-soft);
-  color: var(--accent);
   flex-shrink: 0;
 }
 .settings-feature-note strong {
@@ -776,10 +766,6 @@
   color: var(--fg-2);
   line-height: 1.6;
   margin: 5px 0 0;
-}
-.settings-feature-note--ai .settings-feature-symbol {
-  background: #d1976c18;
-  color: #c48659;
 }
 .settings-window kbd {
   font-family: inherit;

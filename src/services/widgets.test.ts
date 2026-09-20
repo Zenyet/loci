@@ -21,6 +21,10 @@ describe('widget settings migration', () => {
     expect(normalized.weather).toEqual({ enabled: true, city, unit: 'celsius' });
     const updated = patchWidgets(normalized, { clock: { enabled: true } });
     expect(updated.weather).toEqual(normalized.weather);
+    expect(updated.calendar).toEqual({ showLunar: true, showHolidays: true });
+    const calendar = patchWidgets(updated, { calendar: { showLunar: false } });
+    expect(calendar.calendar).toEqual({ showLunar: false, showHolidays: true });
+    expect(calendar.weather).toEqual(normalized.weather);
     expect(normalizeWidgets({ weather: { city: { ...city, latitude: 900 } } } as WidgetSettings).weather.city).toBeNull();
   });
 });

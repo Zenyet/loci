@@ -7,9 +7,9 @@
   "chrome_url_overrides": {
     "newtab": "index.html"
   },
-  "permissions": ["bookmarks", "history", "topSites", "storage", "activeTab"],
+  "permissions": ["bookmarks", "history", "topSites", "storage", "activeTab", "geolocation"],
   "action": { "default_title": "收藏到 Loci", "default_popup": "popup.html" },
-  "optional_host_permissions": ["https://api.open-meteo.com/*", "https://geocoding-api.open-meteo.com/*"],
+  "optional_host_permissions": ["https://api.open-meteo.com/*", "https://geocoding-api.open-meteo.com/*", "https://api.bigdatacloud.net/*"],
   "icons": {
     "16": "icons/icon-16.png",
     "48": "icons/icon-48.png",
