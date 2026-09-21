@@ -16,8 +16,8 @@ interface Props {
   bookmarks: GraphItem[];
   groups: Group[];
   edges: GraphEdge[];
-  /** Display-only derived edges (same cluster / same domain). Not interactive,
-   *  not fed to the physics sim. */
+  /** Derived edges (same cluster / same domain). Follow along during a drag,
+   *  but do not create permanent spring forces or edge menus. */
   autoEdges?: GraphEdge[];
   /** Master toggle for drawing any edges. Defaults to true. */
   showEdges?: boolean;
@@ -91,6 +91,7 @@ export function GraphCanvas(props: Props) {
   const hoverNodeRef = useRef<string | null>(null);
   const hoverEdgeRef = useRef<string | null>(null);
   const dragIdRef = useRef<string | null>(null);
+  const dragNeighborhoodRef = useRef<Set<string> | null>(null);
   // Eased 0→1 spotlight progress, advanced each frame toward its target.
   const hoverProgressRef = useRef(0);
   const nodeOpacityRef = useRef(new Map<string, number>());
@@ -299,6 +300,7 @@ export function GraphCanvas(props: Props) {
     let fadeNodes: GraphNode[] | null = null;
     let fadeNodeIds = new Set<string>();
     let fadeTarget: string | null = null;
+    let fadeNeighborhood: Set<string> | null = null;
     let fadeActive = false;
 
     const scheduleFrame = () => {
@@ -369,10 +371,12 @@ export function GraphCanvas(props: Props) {
         fadeNodeIds = new Set(fadeNodes.map(node => node.id));
       }
       // A settled hover needs no O(N) opacity work during camera movement.
-      if (fadeActive || topologyChanged || nextFadeTarget !== fadeTarget) {
+      if (fadeActive || topologyChanged || nextFadeTarget !== fadeTarget ||
+          fadeNeighborhood !== dragNeighborhoodRef.current) {
         fadeActive = advanceHoverFade(nodeOpacityRef.current, fadeNodeIds,
-          nextFadeTarget, elapsed, !!reduceMotionRef.current);
+          nextFadeTarget, elapsed, !!reduceMotionRef.current, dragNeighborhoodRef.current);
         fadeTarget = nextFadeTarget;
+        fadeNeighborhood = dragNeighborhoodRef.current;
       }
       const fadeAnimating = fadeActive;
       const hoverAnimating = spotlightAnimating || fadeAnimating;
@@ -411,6 +415,7 @@ export function GraphCanvas(props: Props) {
           hoverNodeId: hoverNodeRef.current,
           hoverEdgeId: hoverEdgeRef.current,
           draggingId: dragIdRef.current,
+          dragNeighborhood: dragNeighborhoodRef.current,
           filterMatches: filterMatchesRef.current,
           ghost: ghostRef.current,
           favicons: faviconsRef.current,
@@ -475,6 +480,7 @@ export function GraphCanvas(props: Props) {
     nodeOpacityRef.current.clear();
     if (dragIdRef.current) sim.endDrag(false);
     dragIdRef.current = null;
+    dragNeighborhoodRef.current = null;
     panRef.current = null;
     ghostRef.current = null;
     if (canvasRef.current) canvasRef.current.style.cursor = 'grab';
@@ -552,8 +558,22 @@ export function GraphCanvas(props: Props) {
 
     const promoteToDrag = (wx: number, wy: number) => {
       if (!pendingDrag) return;
-      dragIdRef.current = pendingDrag.id;
-      sim.startDrag(pendingDrag.id, wx, wy);
+      const id = pendingDrag.id;
+      const related = new Set([id]);
+      const byId = getNodeById();
+      const focus = focusNeighborhoodRef.current;
+      // Match the displayed edges, including derived relations. Only one hop:
+      // a chain or cycle must not turn a local drag into moving the whole graph.
+      if (props.showEdges !== false && (!focus || focus.has(id))) {
+        for (const edge of renderEdges) {
+          const other = edge.from === id ? edge.to : edge.to === id ? edge.from : null;
+          if (other !== null && byId.has(other) && (!focus || focus.has(other))) related.add(other);
+        }
+      }
+      dragIdRef.current = id;
+      dragNeighborhoodRef.current = related;
+      sim.startDrag(id, wx, wy, related);
+      canvas.style.cursor = 'grabbing';
       try {
         canvas.setPointerCapture(pendingDrag.pointerId);
         capturedPointerId = pendingDrag.pointerId;
@@ -670,6 +690,7 @@ export function GraphCanvas(props: Props) {
       if (dragIdRef.current) {
         sim.endDrag(false);
         dragIdRef.current = null;
+        dragNeighborhoodRef.current = null;
         invalidateSpatialIndex();
         try {
           canvas.releasePointerCapture(ev.pointerId);
@@ -678,6 +699,7 @@ export function GraphCanvas(props: Props) {
           /* already released */
         }
         requestFrame();
+        canvas.style.cursor = 'grab';
         return;
       }
       panRef.current = null;
@@ -725,9 +747,27 @@ export function GraphCanvas(props: Props) {
       props.onCanvasMenu(ev.clientX, ev.clientY);
     };
 
+    const cancelGesture = () => {
+      if (dragIdRef.current) sim.endDrag(false);
+      dragIdRef.current = null;
+      dragNeighborhoodRef.current = null;
+      pendingDrag = null;
+      ghostFromId = null;
+      ghostRef.current = null;
+      panRef.current = null;
+      const pointerId = capturedPointerId;
+      capturedPointerId = null;
+      if (pointerId !== null && canvas.hasPointerCapture(pointerId)) canvas.releasePointerCapture(pointerId);
+      invalidateSpatialIndex();
+      clearHover();
+      requestFrame();
+    };
+
     canvas.addEventListener('pointerdown', onDown);
     canvas.addEventListener('pointerleave', clearHover);
-    window.addEventListener('blur', clearHover);
+    window.addEventListener('blur', cancelGesture);
+    window.addEventListener('pointercancel', cancelGesture);
+    canvas.addEventListener('lostpointercapture', cancelGesture);
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
     canvas.addEventListener('wheel', onWheel, { passive: false });
@@ -735,19 +775,19 @@ export function GraphCanvas(props: Props) {
     canvas.addEventListener('contextmenu', onCtx);
     return () => {
       if (sampleHoverRef.current === sampleHover) sampleHoverRef.current = () => false;
-      if (capturedPointerId !== null && canvas.hasPointerCapture(capturedPointerId)) {
-        canvas.releasePointerCapture(capturedPointerId);
-      }
+      canvas.removeEventListener('lostpointercapture', cancelGesture);
+      cancelGesture();
       canvas.removeEventListener('pointerdown', onDown);
       canvas.removeEventListener('pointerleave', clearHover);
-      window.removeEventListener('blur', clearHover);
+      window.removeEventListener('blur', cancelGesture);
+      window.removeEventListener('pointercancel', cancelGesture);
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
       canvas.removeEventListener('wheel', onWheel);
       canvas.removeEventListener('dblclick', onDblClick);
       canvas.removeEventListener('contextmenu', onCtx);
     };
-  }, [sim, camera, props]);
+  }, [sim, camera, props, renderEdges]);
 
   return (
     <div ref={wrapRef} style={wrapStyle}>

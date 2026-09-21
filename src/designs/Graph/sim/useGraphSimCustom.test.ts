@@ -1,7 +1,7 @@
 import { act, createElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, describe, it, expect, vi } from 'vitest';
-import type { GraphItem, Group } from '../../../types';
+import type { GraphItem, Group, PinsMap } from '../../../types';
 import { radiusFor, useGraphSimCustom } from './useGraphSimCustom';
 import type { GraphSim } from './types';
 import { collectionPositions } from './collectionLayout';
@@ -32,13 +32,13 @@ afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 it('cools while a drag is held still and reheats when that node moves again', () => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
-  const bookmarks: GraphItem[] = [{ id: 'a', parentId: '', name: 'A', url: '', group: '', color: '', letter: 'A', visits: 0, last: '' }];
+  const bookmarks: GraphItem[] = ['a', 'b'].map(id => ({ id, parentId: '', name: id, url: '', group: '', color: '', letter: id, visits: 0, last: '' }));
   let sim!: GraphSim;
   function Harness() { sim = useGraphSimCustom({ bookmarks, groups: [], edges: [], pins: {} }); return null; }
   const root = createRoot(document.createElement('div'));
   act(() => root.render(createElement(Harness)));
   try {
-    sim.startDrag('a', 20, 30);
+    sim.startDrag('a', 20, 30, new Set(['a', 'b']));
     for (let i = 0; i < 400; i++) sim.simulationRef.current!.tick();
     expect(sim.simulationRef.current!.alpha()).toBeLessThan(.003);
     sim.dragTo(20, 30);
@@ -49,6 +49,81 @@ it('cools while a drag is held still and reheats when that node moves again', ()
     expect(sim.findById('a')).toMatchObject({ x: 80, y: 90 });
     sim.endDrag(false);
   } finally { act(() => root.unmount()); }
+});
+
+describe('connected node dragging', () => {
+  let root: ReturnType<typeof createRoot>;
+  let sim: GraphSim;
+  const bookmarks: GraphItem[] = ['a', 'b', 'pinned', 'unrelated'].map(id => ({
+    id, parentId: '', name: id, url: '', group: '', color: '', letter: id, visits: 0, last: '',
+  }));
+  const edges: [] = [];
+  const groups: [] = [];
+  function Harness({ items = bookmarks, pins = {} }: { items?: GraphItem[]; pins?: PinsMap }) {
+    sim = useGraphSimCustom({ bookmarks: items, groups, edges, pins });
+    return null;
+  }
+  function mount(pins: PinsMap = {}) {
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+    root = createRoot(document.createElement('div'));
+    act(() => root.render(createElement(Harness, { pins })));
+    sim.nodesRef.current.forEach((node, i) => {
+      if (!pins[node.id]) { node.x = i * 100; node.y = i * 50; }
+    });
+  }
+  afterEach(() => { if (root) act(() => root.unmount()); });
+
+  it('moves connected nodes with stable offsets, leaving pinned and unrelated nodes alone', () => {
+    mount({ pinned: { x: 400, y: 200 } });
+    const a = sim.findById('a')!, b = sim.findById('b')!;
+    const pinned = { ...sim.findById('pinned')! }, unrelated = { ...sim.findById('unrelated')! };
+    sim.startDrag('a', 20, 30, new Set(['a', 'b', 'pinned', 'missing']));
+    expect(b).toMatchObject({ x: 120, y: 80, fx: 120, fy: 80 });
+    sim.dragTo(300, -150);
+    expect(a).toMatchObject({ x: 300, y: -150 });
+    expect(b).toMatchObject({ x: 400, y: -100 });
+    expect(sim.findById('pinned')).toEqual(pinned);
+    expect(sim.findById('unrelated')).toEqual(unrelated);
+    for (let i = 0; i < 30; i++) sim.simulationRef.current!.tick();
+    expect(b.x - a.x).toBe(100);
+    expect(b.y - a.y).toBe(50);
+    expect(sim.endDrag(false)).toEqual({ id: 'a', x: 300, y: -150 });
+    expect(a).toMatchObject({ fx: null, fy: null, vx: 0, vy: 0 });
+    expect(b).toMatchObject({ fx: null, fy: null, vx: 0, vy: 0 });
+    expect(sim.findById('pinned')).toMatchObject({ x: 400, y: 200, fx: 400, fy: 200 });
+    sim.dragTo(999, 999);
+    expect(a.x).toBe(300);
+  });
+
+  it('preserves the original pin when the grabbed node was already fixed', () => {
+    mount({ a: { x: 5, y: 10 } });
+    sim.startDrag('a', 100, 100, new Set(['a', 'b']));
+    sim.endDrag(false);
+    expect(sim.findById('a')).toMatchObject({ x: 5, y: 10, fx: 5, fy: 10 });
+    expect(sim.findById('b')).toMatchObject({ fx: null, fy: null });
+  });
+
+  it('pins only the grabbed node when requested, releasing its neighbors', () => {
+    mount();
+    sim.startDrag('a', 200, 300, new Set(['a', 'b']));
+    sim.endDrag(true);
+    expect(sim.findById('a')).toMatchObject({ fx: 200, fy: 300 });
+    expect(sim.findById('b')).toMatchObject({ fx: null, fy: null });
+  });
+
+  it('releases every temporary anchor when the topology changes or the view unmounts', () => {
+    mount();
+    const previous = sim.nodesRef.current;
+    sim.startDrag('a', 100, 100, new Set(['a', 'b']));
+    act(() => root.render(createElement(Harness, { items: bookmarks.filter(node => node.id !== 'a') })));
+    for (const node of previous) expect(node).toMatchObject({ fx: null, fy: null });
+    expect(sim.endDrag(false)).toBeNull();
+    expect(sim.findById('a')).toBeNull();
+    sim.startDrag('b', 200, 200, new Set(['b', 'unrelated']));
+    const current = sim.nodesRef.current;
+    act(() => root.unmount());
+    for (const node of current) expect(node).toMatchObject({ fx: null, fy: null });
+  });
 });
 
 function settledCollection(hiddenFolders = 0, looseSites = 0, splitParents = false) {

@@ -226,6 +226,22 @@ it('keeps hovered and matching labels readable in a dense zoomed-out overview', 
   expect(labels).not.toContain('Node 2');
 });
 
+it('keeps dragged neighbors labeled at low zoom and emphasizes their connections', () => {
+  const nodes = Array.from({ length: 200 }, (_, i) => ({ ...node, id: `${i}`, name: `Node ${i}`, x: i * 5 }));
+  const favicons = { get: () => readyFavicon() } as unknown as FaviconCache;
+  const state: RenderState = { ...stateWithFavicons(favicons), nodes, nodeById: new Map(nodes.map(n => [n.id, n])),
+    draggingId: '0', dragNeighborhood: new Set(['0', '1']),
+    edges: [{ id: 'direct', from: '0', to: '1', kind: 'auto' }, { id: 'other', from: '2', to: '3', kind: 'auto' }] };
+  const ctx = createContext(vi.fn());
+  const strokes: { width: number; alpha: number }[] = [];
+  ctx.stroke = vi.fn(() => { strokes.push({ width: ctx.lineWidth, alpha: ctx.globalAlpha }); });
+  drawGraph(ctx, state, { scale: .3, tx: 0, ty: 0 }, theme, { width: 800, height: 600, dpr: 1 });
+  const labels = vi.mocked(ctx.fillText).mock.calls.map(args => args[0]);
+  expect(labels).toEqual(['Node 0', 'Node 1']);
+  expect(strokes[0]).toEqual({ width: 2.5, alpha: 1 });
+  expect(strokes[1]).toEqual({ width: 1.3, alpha: .5 });
+});
+
 describe('edgeStyleFor', () => {
   it('draws auto edges as a visible, solid connective web', () => {
     // Auto edges are now the primary connective tissue (every node joins one

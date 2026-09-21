@@ -52,11 +52,88 @@ beforeEach(async () => {
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ x: 0, y: 0, left: 0, top: 0, right: 1000, bottom: 600, width: 1000, height: 600, toJSON() {} });
   container = document.createElement('div'); document.body.append(container); root = createRoot(container);
   vi.mocked(drawGraph).mockClear(); mocks.sim.endDrag.mockClear(); mocks.sim.dragTo.mockClear();
+  mocks.sim.startDrag.mockClear(); mocks.sim.nodesRef.current = [mocks.node];
   vi.mocked(findNodeAt).mockClear(); vi.mocked(props.onOpenGroup).mockClear();
   await act(async () => root.render(<GraphCanvas {...props}/>));
   await flushFrame();
 });
 afterEach(async () => { await act(async () => root.unmount()); container.remove(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+
+describe('dragging connected nodes', () => {
+  const edges: ComponentProps<typeof GraphCanvas>['edges'] = [
+    { id: 'manual', from: 'b', to: 'folder', kind: 'manual' },
+    { id: 'second-hop', from: 'b', to: 'd', kind: 'manual' },
+    { id: 'missing', from: 'folder', to: 'missing', kind: 'manual' },
+  ];
+  const autoEdges: typeof edges = [
+    { id: 'auto', from: 'folder', to: 'c', kind: 'auto' },
+    { id: 'duplicate', from: 'folder', to: 'b', kind: 'auto' },
+  ];
+  async function setup(overrides: Partial<ComponentProps<typeof GraphCanvas>> = {}) {
+    mocks.sim.nodesRef.current = [mocks.node, ...['b', 'c', 'd'].map((id, i) => ({ ...mocks.node, id, x: (i + 1) * 100 }))];
+    await act(async () => root.render(<GraphCanvas {...props} edges={edges} autoEdges={autoEdges} {...overrides}/>));
+    const canvas = container.querySelector('canvas')!;
+    canvas.setPointerCapture = vi.fn(); canvas.hasPointerCapture = vi.fn(() => true); canvas.releasePointerCapture = vi.fn();
+    return canvas;
+  }
+  async function drag(canvas: HTMLCanvasElement) {
+    pointer(canvas, 'pointerdown'); pointer(canvas, 'pointermove', 520, 310); await flushFrame();
+  }
+
+  it('includes direct manual and automatic neighbors once, excluding missing nodes and longer chains', async () => {
+    const canvas = await setup();
+    await drag(canvas);
+    const related = new Set(['folder', 'b', 'c']);
+    expect(mocks.sim.startDrag).toHaveBeenCalledWith('folder', 20, 10, related);
+    expect(latest().dragNeighborhood).toEqual(related);
+    expect([...latest().nodeOpacity!]).toEqual([['folder', 1], ['b', 1], ['c', 1], ['d', .3]]);
+    pointer(canvas, 'pointermove', 540, 320); await flushFrame();
+    expect(mocks.sim.startDrag).toHaveBeenCalledOnce();
+    expect(mocks.sim.dragTo).toHaveBeenLastCalledWith(40, 20);
+    pointer(canvas, 'pointerup', 540, 320); await flushFrame();
+    expect(latest().dragNeighborhood).toBeNull();
+    expect(mocks.sim.endDrag).toHaveBeenCalledOnce();
+    expect([...latest().nodeOpacity!.values()]).toEqual([1, 1, 1, 1]);
+  });
+
+  it.each([
+    { overrides: { showEdges: false }, expected: ['folder'] },
+    { overrides: { focusNeighborhood: new Set(['folder', 'b']) }, expected: ['folder', 'b'] },
+  ])('follows only displayed connections: $expected', async ({ overrides, expected }) => {
+    const canvas = await setup(overrides);
+    await drag(canvas);
+    expect(latest().dragNeighborhood).toEqual(new Set(expected));
+  });
+
+  it.each(['pointercancel', 'lostpointercapture', 'blur'])('releases the neighborhood after %s', async type => {
+    const canvas = await setup();
+    await drag(canvas);
+    if (type === 'blur') window.dispatchEvent(new Event(type));
+    else pointer(canvas, type);
+    await flushFrame();
+    expect(mocks.sim.endDrag).toHaveBeenCalledOnce();
+    expect(latest().draggingId).toBeNull();
+    expect(latest().dragNeighborhood).toBeNull();
+    pointer(canvas, 'pointerup');
+    expect(props.onOpenGroup).not.toHaveBeenCalled();
+  });
+
+  it('releases the neighborhood when incoming props replace the graph during a drag', async () => {
+    const canvas = await setup();
+    await drag(canvas);
+    await act(async () => root.render(<GraphCanvas {...props}/>));
+    await flushFrame();
+    expect(mocks.sim.endDrag).toHaveBeenCalledOnce();
+    expect(latest().dragNeighborhood).toBeNull();
+  });
+
+  it('does not move the neighborhood on a plain click', async () => {
+    const canvas = await setup();
+    pointer(canvas, 'pointerdown'); pointer(canvas, 'pointerup');
+    expect(mocks.sim.startDrag).not.toHaveBeenCalled();
+    expect(props.onOpenGroup).toHaveBeenCalledWith('folder');
+  });
+});
 
 it('uses the new folder theme on the first frame after the parent applies settings', async () => {
   const previous = document.body.style.getPropertyValue('--bg');

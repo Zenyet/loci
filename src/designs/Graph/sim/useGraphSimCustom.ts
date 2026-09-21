@@ -23,6 +23,27 @@ export function radiusFor(count: number, kind: GraphNode['nodeKind']): number {
   return 24 + Math.min(8, Math.sqrt(Math.max(0, count)) * 0.7);
 }
 
+interface DragMember {
+  node: GraphNode;
+  dx: number;
+  dy: number;
+  fx: number | null;
+  fy: number | null;
+}
+
+interface DragSession {
+  node: GraphNode;
+  members: DragMember[];
+}
+
+function moveDrag(session: DragSession, wx: number, wy: number): void {
+  for (const { node, dx, dy } of session.members) {
+    node.x = node.fx = wx + dx;
+    node.y = node.fy = wy + dy;
+    node.vx = node.vy = 0;
+  }
+}
+
 export function useGraphSimCustom({
   bookmarks,
   edges,
@@ -32,7 +53,26 @@ export function useGraphSimCustom({
   const nodesRef = useRef<GraphNode[]>([]);
   const engineRef = useRef<Engine | null>(null);
   const simulationRef = useRef<SimulationLike | null>(null);
-  const draggingRef = useRef<string | null>(null);
+  const draggingRef = useRef<DragSession | null>(null);
+  const nodeByIdRef = useRef(new Map<string, GraphNode>());
+
+  const endDrag = useCallback((pinInsteadOfRelease: boolean) => {
+    const session = draggingRef.current;
+    if (!session) return null;
+    draggingRef.current = null;
+    const node = session.node;
+    const pos = { id: node.id, x: node.fx ?? node.x, y: node.fy ?? node.y };
+    for (const member of session.members) {
+      if (pinInsteadOfRelease && member.node === node) continue;
+      member.node.fx = member.fx;
+      member.node.fy = member.fy;
+      if (member.fx !== null) member.node.x = member.fx;
+      if (member.fy !== null) member.node.y = member.fy;
+      member.node.vx = member.node.vy = 0;
+    }
+    engineRef.current?.alphaTarget(0);
+    return pos;
+  }, []);
 
   // Engine is allocated once per mount; topology and node arrays are swapped
   // via `setTopology` on each rebuild.
@@ -92,25 +132,37 @@ export function useGraphSimCustom({
     engine.alpha(1);
 
     nodesRef.current = nodes;
+    nodeByIdRef.current = byId;
 
     return () => {
+      endDrag(false);
       // Don't destroy the engine — we reuse it across topology changes.
       // Just cool it so stray ticks don't run against swapped-out nodes.
       engine.stop();
     };
-  }, [bookmarks, edges, pins]);
+  }, [bookmarks, edges, pins, endDrag]);
 
   const reheat = useCallback((alpha = 0.4) => {
     const engine = engineRef.current;
     if (engine) engine.alpha(alpha);
   }, []);
 
-  const startDrag = useCallback((id: string, wx: number, wy: number) => {
-    const node = nodesRef.current.find((n) => n.id === id);
+  const startDrag = useCallback((id: string, wx: number, wy: number, relatedIds?: ReadonlySet<string>) => {
+    endDrag(false);
+    const node = nodeByIdRef.current.get(id);
     if (!node) return;
-    draggingRef.current = id;
-    node.fx = wx;
-    node.fy = wy;
+    const members: DragMember[] = [{ node, dx: 0, dy: 0, fx: node.fx ?? null, fy: node.fy ?? null }];
+    // Snapshot once per gesture. Pointer moves only visit these members,
+    // with no topology traversal, node searches, or React state updates.
+    for (const relatedId of relatedIds ?? []) {
+      if (relatedId === id) continue;
+      const related = nodeByIdRef.current.get(relatedId);
+      if (!related || related.fx != null || related.fy != null) continue;
+      members.push({ node: related, dx: related.x - node.x, dy: related.y - node.y, fx: null, fy: null });
+    }
+    const session = { node, members };
+    draggingRef.current = session;
+    moveDrag(session, wx, wy);
     const engine = engineRef.current;
     if (engine) {
       // Pointer movement supplies heat. Holding a node still must eventually
@@ -118,38 +170,18 @@ export function useGraphSimCustom({
       engine.alphaTarget(0);
       if (engine.alpha() < 0.3) engine.alpha(0.3);
     }
-  }, []);
+  }, [endDrag]);
 
   const dragTo = useCallback((wx: number, wy: number) => {
-    const id = draggingRef.current;
-    if (!id) return;
-    const node = nodesRef.current.find((n) => n.id === id);
-    if (!node) return;
-    if (node.fx === wx && node.fy === wy) return;
-    node.fx = wx;
-    node.fy = wy;
+    const session = draggingRef.current;
+    if (!session || (session.node.fx === wx && session.node.fy === wy)) return;
+    moveDrag(session, wx, wy);
     const engine = engineRef.current;
     if (engine && engine.alpha() < 0.3) engine.alpha(0.3);
   }, []);
 
-  const endDrag = useCallback((pinInsteadOfRelease: boolean) => {
-    const id = draggingRef.current;
-    if (!id) return null;
-    draggingRef.current = null;
-    const node = nodesRef.current.find((n) => n.id === id);
-    if (!node) return null;
-    const pos = { id, x: node.fx ?? node.x, y: node.fy ?? node.y };
-    if (!pinInsteadOfRelease) {
-      node.fx = null;
-      node.fy = null;
-    }
-    const engine = engineRef.current;
-    if (engine) engine.alphaTarget(0);
-    return pos;
-  }, []);
-
   const findById = useCallback(
-    (id: string) => nodesRef.current.find((n) => n.id === id) ?? null,
+    (id: string) => nodeByIdRef.current.get(id) ?? null,
     []
   );
 

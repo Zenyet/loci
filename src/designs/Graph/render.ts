@@ -12,6 +12,8 @@ export interface RenderState {
   hoverNodeId: string | null;
   hoverEdgeId: string | null;
   draggingId: string | null;
+  /** Visible one-hop connections highlighted for the current drag. */
+  dragNeighborhood?: ReadonlySet<string> | null;
   /** Set of node ids that match current filter; null = no filter active. */
   filterMatches: Set<string> | null;
   /** Source node + live cursor position while shift-drag is building an edge. */
@@ -361,7 +363,10 @@ function drawEdges(
     const isHover = state.hoverEdgeId === e.id;
     const aAlpha = nodeAlpha(state, a.id);
     const bAlpha = nodeAlpha(state, b.id);
-    const style = edgeStyleFor(e.kind, isHover);
+    const isDragConnection = !!state.draggingId &&
+      (e.from === state.draggingId || e.to === state.draggingId) &&
+      !!state.dragNeighborhood?.has(e.from) && !!state.dragNeighborhood?.has(e.to);
+    const style = edgeStyleFor(e.kind, isHover || isDragConnection);
     const alpha = Math.sqrt(aAlpha * bAlpha) * style.alphaMul;
 
     const fromHue = hueForNode(a, state.topicHueById);
@@ -721,6 +726,7 @@ function drawLabels(
   const material = labelMaterial(theme.bg);
   for (const n of state.nodes) {
     if (!showAll && n.id !== state.hoverNodeId && n.id !== state.draggingId &&
+        !state.dragNeighborhood?.has(n.id) &&
         !state.filterMatches?.has(n.id) && !state.focusNeighborhood?.has(n.id)) continue;
     if (!nodeIntersects(n, bounds, 180)) continue;
     const isGroup = n.nodeKind === "group";

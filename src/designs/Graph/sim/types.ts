@@ -35,12 +35,13 @@ export interface SimParams {
 export interface GraphSim {
   nodesRef: MutableRefObject<GraphNode[]>;
   simulationRef: MutableRefObject<SimulationLike | null>;
-  /** Start a drag on a node: set fx/fy and wake the simulation. */
-  startDrag: (id: string, wx: number, wy: number) => void;
+  /** Drag a node and its visible neighbors together, preserving their offsets.
+   *  Already pinned neighbors stay in place. */
+  startDrag: (id: string, wx: number, wy: number, relatedIds?: ReadonlySet<string>) => void;
   dragTo: (wx: number, wy: number) => void;
   endDrag: (pinInsteadOfRelease: boolean) => { id: string; x: number; y: number } | null;
   /** Kick the physics (alpha) after a topology change. */
   reheat: (alpha?: number) => void;
-  /** Return node by id (O(N); OK for ≤ ~1k). */
+  /** Return a live node by id without scanning the simulation. */
   findById: (id: string) => GraphNode | null;
 }
