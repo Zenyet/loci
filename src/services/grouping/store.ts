@@ -21,11 +21,7 @@ export async function saveUndo(u: GroupingUndo): Promise<void> {
     await chrome.storage.local.set({ [UNDO_KEY]: u });
     return;
   }
-  try {
-    localStorage.setItem(UNDO_KEY, JSON.stringify(u));
-  } catch {
-    /* noop */
-  }
+  localStorage.setItem(UNDO_KEY, JSON.stringify(u));
 }
 
 export async function clearUndo(): Promise<void> {

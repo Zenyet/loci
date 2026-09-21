@@ -3,9 +3,9 @@ import type { ChromeData, Settings } from '../types';
 import type { GroupingWorkflow } from '../hooks/useGrouping';
 import { getProviderConfig } from '../data/aiProviders';
 import { buildApplyPlan } from '../services/grouping/plan';
-import { groupingErrorMessage } from '../services/grouping/errors';
 import { AiModelSettings, AiGroupingPreferences } from './AiSettings';
 import { GroupingReview } from './GroupingReview';
+import { AiHistory } from './AiHistory';
 import { PreferenceIcon } from './PreferenceIcon';
 import { Icon } from './Icon';
 import './AiOrganizer.css';
@@ -16,7 +16,7 @@ interface Props {
   data?: ChromeData;
   flow?: GroupingWorkflow;
   aiReady?: boolean;
-  onClassify?: () => Promise<void>;
+  onClassify?: () => Promise<string | void>;
   classifying?: boolean;
 }
 
@@ -35,19 +35,26 @@ export function AiOrganizer({ settings, onChange, data, flow, aiReady, onClassif
   const [classifyMessage, setClassifyMessage] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [modelOpen, setModelOpen] = useState(!aiReady);
+  const [view, setView] = useState<'organize' | 'history'>('organize');
   const step = stage === 'complete' || stage === 'undoing' ? 2 : stage === 'review' || stage === 'applying' ? 1 : 0;
   const summary = flow?.proposal && data ? buildApplyPlan(flow.proposal, data.bookmarks).summary : { movedBookmarks: 0, newFolders: 0 };
 
   useEffect(() => {
     if (previousStage.current === stage) return;
     previousStage.current = stage;
-    if (stage === 'applying') return;
+    if (stage === 'applying' || view === 'history') return;
     const scroller = headingRef.current?.closest('.settings-content');
     if (scroller) scroller.scrollTop = 0;
     headingRef.current?.focus({ preventScroll: true });
-  }, [stage]);
+  }, [stage, view]);
 
   return <div className="ai-organizer">
+    <div className="ai-workspace-nav" role="group" aria-label="智能整理视图">
+      <button type="button" aria-pressed={view === 'organize'} onClick={() => setView('organize')}><Icon name="ai" size={15} />整理与分析</button>
+      <button type="button" aria-pressed={view === 'history'} onClick={() => setView('history')}><Icon name="history" size={15} />执行历史</button>
+    </div>
+    {view === 'history' && <AiHistory />}
+    <div className="ai-workspace" hidden={view !== 'organize'}>
     <header className="ai-heading">
       <PreferenceIcon name="ai" />
       <div><h2 ref={headingRef} tabIndex={-1}>智能整理</h2><p>按内容归类，先预览，再应用。</p></div>
@@ -96,7 +103,7 @@ export function AiOrganizer({ settings, onChange, data, flow, aiReady, onClassif
         <button type="button" className="ai-text-button" disabled={!aiReady || !total || analyzing || classifying || !onClassify} onClick={async () => {
           if (analyzing || !onClassify) return;
           setAnalyzing(true); setClassifyMessage(null);
-          try { await onClassify(); setClassifyMessage('书签主题已更新。'); } catch (error) { setClassifyMessage(groupingErrorMessage(error)); }
+          try { const message = await onClassify(); setClassifyMessage(message || '分析已完成，可在「执行历史」查看主题分配与连线结果。'); } catch { setClassifyMessage('主题分析未完成，可在「执行历史」查看结果并重试。'); }
           finally { setAnalyzing(false); }
         }}>{analyzing || classifying ? '分析中…' : '分析主题'}<Icon name="arrow" size={12} /></button>
       </div>}
@@ -133,5 +140,6 @@ export function AiOrganizer({ settings, onChange, data, flow, aiReady, onClassif
       <p>{stage === 'undoing' ? '请稍候，正在撤销上次整理。' : `已整理 ${flow?.result?.movedBookmarks ?? 0} 个书签，新建 ${flow?.result?.newFolders ?? 0} 个文件夹。`}</p>
       <div className="ai-action-buttons"><button type="button" className="settings-button" disabled={isWorking || !flow?.canUndo} onClick={() => void flow?.undo()}>撤销本次整理</button><button type="button" className="settings-button settings-button--primary" disabled={isWorking} onClick={flow?.configure}>继续整理</button></div>
     </section>}
+    </div>
   </div>;
 }

@@ -36,7 +36,7 @@ interface Props {
   onChange: (patch: Partial<Settings>) => void;
   open: boolean;
   onToggle: () => void;
-  onClassify?: () => Promise<void>;
+  onClassify?: () => Promise<string | void>;
   classifying?: boolean;
   aiReady?: boolean;
   data?: ChromeData;

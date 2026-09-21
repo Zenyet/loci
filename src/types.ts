@@ -157,6 +157,7 @@ export interface GroupProposal {
 /** 撤销日志(storage 单槽)。 */
 export interface GroupingUndo {
   at: string;
+  historyId?: string;
   moved: { id: string; fromParentId: string }[];
   createdFolderIds: string[];
 }

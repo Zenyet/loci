@@ -49,9 +49,5 @@ export async function saveTopicCache(cache: TopicCache): Promise<void> {
     await chrome.storage.local.set({ [TOPIC_CACHE_KEY]: cache });
     return;
   }
-  try {
-    localStorage.setItem(TOPIC_CACHE_KEY, JSON.stringify(cache));
-  } catch {
-    /* noop */
-  }
+  localStorage.setItem(TOPIC_CACHE_KEY, JSON.stringify(cache));
 }

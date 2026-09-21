@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useChromeData } from './hooks/useChromeData';
 import { useSettings } from './hooks/useSettings';
 import { Tweaks } from './components/Tweaks';
@@ -6,8 +6,7 @@ import { WidgetDashboard } from './components/widgets/WidgetDashboard';
 import { Graph } from './designs/Graph/Graph';
 import { copy } from './i18n';
 import { makeClassifier } from './services/ai';
-import { loadTopicCache, saveTopicCache, sitesNeedingClassify, cacheKey } from './services/topicCache';
-import { hostOf } from './designs/Graph/relationSuggest';
+import { analyzeTopics } from './services/ai/analyze';
 import { useGrouping } from './hooks/useGrouping';
 import { useInbox } from './hooks/useInbox';
 import { InboxPanel } from './components/InboxPanel';
@@ -22,29 +21,21 @@ export default function App() {
   const [inboxOpen, setInboxOpen] = useState(() => new URLSearchParams(window.location.search).get('view') === 'inbox');
   const [requestedSection, setRequestedSection] = useState<{ section: 'widgets' | 'ai'; revision: number }>();
   const [classifying, setClassifying] = useState(false);
+  const classifyPending = useRef(false);
   const [topicsVersion, setTopicsVersion] = useState(0);
 
-  const runClassify = async (): Promise<void> => {
+  const runClassify = async (): Promise<string | void> => {
     const classifier = makeClassifier(settings.ai);
-    if (!classifier) return;
+    if (!classifier || classifyPending.current) return;
+    classifyPending.current = true;
     setClassifying(true);
     try {
-      const cache = await loadTopicCache();
-      const sites = (data?.bookmarks ?? []).map((b) => ({ id: b.id, title: b.name, url: b.url }));
-      const need = sitesNeedingClassify(sites, cache);
-      if (need.length) {
-        const inputs = need.map((s) => ({ id: s.id, title: s.title, host: hostOf(s.url) ?? s.url }));
-        const result = await classifier.classify(inputs);
-        const now = new Date().toISOString();
-        for (const s of need) {
-          const r = result.get(s.id);
-          if (r) cache[cacheKey(s)] = { topics: r.topics, at: now };
-        }
-        await saveTopicCache(cache);
-      }
+      const summary = await analyzeTopics(data?.bookmarks ?? [], settings.ai, classifier);
       setTopicsVersion((v) => v + 1);
+      return summary;
     } finally {
       setClassifying(false);
+      classifyPending.current = false;
     }
   };
 

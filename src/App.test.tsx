@@ -4,6 +4,7 @@ import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
 import { DEFAULT_SETTINGS, type ChromeData, type Settings } from './types';
 import { GroupingError } from './services/grouping/errors';
+import { loadAiHistory } from './services/aiHistory';
 
 const mocks = vi.hoisted(() => ({
   chrome: {} as { data: ChromeData; loading: boolean; error: null; refresh: ReturnType<typeof vi.fn> },
@@ -30,6 +31,7 @@ async function click(name: string) {
 async function openOrganizer() { await render(); await click('设置'); await click('智能整理'); }
 
 beforeEach(() => {
+  localStorage.clear();
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   mocks.settings = { ...DEFAULT_SETTINGS, ai: { provider: 'custom', apiKey: 'test-key', model: 'test-model', baseUrl: 'https://example.com/v1' } };
   mocks.chrome = { data: { bookmarks: [bookmark('a'), bookmark('b')], groups: [], recents: [], barId: 'bar', source: 'fallback' }, loading: false, error: null, refresh: vi.fn() };
@@ -142,6 +144,30 @@ describe('continuous AI organizing workspace', () => {
     expect(container.querySelector('[role="alert"]')?.textContent).toContain('模型响应超时');
     expect(container.textContent).toContain('生成整理方案');
     expect(mocks.apply).not.toHaveBeenCalled();
+  });
+
+  it('records proposal, application and cancellation, keeping history available during a run', async () => {
+    await openOrganizer(); await click('生成整理方案'); await click('应用整理');
+    let records = await loadAiHistory();
+    const applied = records.find(record => record.kind === 'grouping')!;
+    const proposal = records.find(record => record.kind === 'proposal')!;
+    expect(applied.relatedId).toBe(proposal.id);
+    expect(applied.grouping!.assignments.map(item => item.name)).toEqual(['GitHub', 'MDN']);
+    await click('执行历史');
+    expect(container.querySelectorAll('.ai-history-record')).toHaveLength(2);
+    await click('整理与分析'); await click('继续整理');
+    const pending = deferred<typeof raw>(); mocks.group.mockReturnValue(pending.promise);
+    await click('生成整理方案'); await click('执行历史');
+    await act(async () => pending.resolve(raw));
+    expect(container.querySelectorAll('.ai-history-record')).toHaveLength(3);
+    expect(container.querySelector<HTMLElement>('.ai-workspace')!.hidden).toBe(true);
+    await click('整理与分析');
+    const cancelled = deferred<typeof raw>(); mocks.group.mockReturnValue(cancelled.promise);
+    await click('重新生成'); await click('停止生成');
+    await act(async () => cancelled.resolve(raw));
+    records = await loadAiHistory();
+    expect(records.filter(record => record.status === 'cancelled')).toHaveLength(1);
+    expect(records).toHaveLength(4);
   });
 
   it('reports failed undo without hiding the retry action', async () => {
