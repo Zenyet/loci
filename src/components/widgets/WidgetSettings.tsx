@@ -4,7 +4,6 @@ import { patchWidgets, widgetCardOrder } from '../../services/widgetSettings';
 import { requestWeatherPermission } from '../../services/weather';
 import { HOLIDAY_YEARS } from '../../data/holidays';
 import { Icon } from '../Icon';
-import { PreferenceIcon } from '../PreferenceIcon';
 import { SettingGroup, SettingRow, Switch } from '../SettingsControls';
 import { CityPicker } from './CityPicker';
 import './widgets.css';
@@ -34,7 +33,6 @@ export function WidgetSettings({ value, onChange }: { value: WidgetPreferences; 
     onChange(patchWidgets(value, { order: order.flatMap<WidgetId>(item => item === 'clock' ? ['clock', 'weather'] : [item]) }));
   };
   return <div className="widget-preferences">
-    <header className="widget-preferences__heading"><PreferenceIcon name="widgets" /><div><h2>给日常，添一点便利</h2><p>天气、时间，还有今天想完成的事。</p></div></header>
     <p className="widget-note">时间与天气共用一张卡片，可分别开启；日期始终保留。用箭头调整卡片顺序。</p>
     {error && <p role="alert" className="widget-error">{error}</p>}
     {cards.map((id, index) => <section className="widget-option" key={id} aria-label={`${labels[id]}设置`}>

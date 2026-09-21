@@ -77,7 +77,7 @@
   min-width: 124px;
   max-width: 255px;
   min-height: 33px;
-  padding: 4px 6px 4px 12px;
+  padding: 4px 12px;
   border: 1px solid var(--settings-border, var(--ui-control-border));
   border-radius: 11px;
   background: var(--settings-input, var(--ui-control-bg));
@@ -138,7 +138,7 @@
   display: flex;
   align-items: center;
   gap: 7px;
-  padding: 8px 10px 8px 6px;
+  padding: 8px 10px;
   min-height: 34px;
   border-radius: 10px;
   cursor: pointer;

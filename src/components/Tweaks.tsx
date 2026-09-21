@@ -680,15 +680,6 @@ export function Tweaks({
                 )}
                 {section === "search" && (
                   <>
-                    <div className="settings-feature-note">
-                      <PreferenceIcon name="search" />
-                      <div>
-                        <strong>随想，随搜。</strong>
-                        <p>
-                          直接输入文字，或按 <kbd>⌘ / Ctrl K</kbd> 搜索书签。
-                        </p>
-                      </div>
-                    </div>
                     <SettingGroup
                       title="默认搜索目标"
                       note="没有匹配的书签时，按 Enter 使用选定的搜索引擎或 AI 助手。"

@@ -9,7 +9,8 @@
   display: flex;
   align-items: center;
   gap: 18px;
-  padding: 0 26px 19px;
+  /* Keep the input's 3px focus ring inside the clipped panel body. */
+  padding: 4px 26px 19px;
   flex-shrink: 0;
 }
 .groups-browser__toolbar .ui-text-field {
@@ -150,7 +151,7 @@
 .groups-create__submit { display: flex; align-items: center; justify-content: center; min-height: 36px; padding: 0 12px; border-radius: 10px; background: var(--accent); color: #fff; font-size: 12px; white-space: nowrap; }
 .groups-create__submit:disabled { opacity: .4; cursor: default; }
 @media (max-width: 560px) {
-  .groups-browser__toolbar { padding: 0 18px 16px; }
+  .groups-browser__toolbar { padding: 4px 18px 16px; }
   .groups-browser__list { padding: 6px 8px 12px; }
   .groups-browser__columns { padding-left: 33px; padding-right: 21px; }
   .groups-row { gap: 8px; padding-left: min(var(--group-indent, 0px), 36px); }

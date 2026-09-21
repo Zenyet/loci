@@ -1,9 +1,6 @@
 .settings-content[data-section="ai"] { padding: 30px 30px 24px; }
 .ai-organizer { display: flex; flex-direction: column; gap: 19px; min-width: 0; }
-.ai-heading { display: flex; align-items: center; gap: 14px; }
-.ai-heading > .preference-icon { width: 46px; height: 46px; flex-shrink: 0; }
-.ai-heading h2 { font-size: 23px; letter-spacing: -.6px; font-weight: 550; margin: 0 0 5px; outline: none; }
-.ai-heading p, .ai-review-heading p { margin: 0; font-size: 12px; color: var(--fg-2); line-height: 1.6; }
+.ai-review-heading p { margin: 0; font-size: 12px; color: var(--fg-2); line-height: 1.6; }
 .ai-steps { display: flex; align-items: center; padding: 0; margin: 2px 0 4px; list-style: none; }
 .ai-steps li { display: flex; align-items: center; gap: 7px; color: var(--fg-3); font-size: 11px; flex: 1; white-space: nowrap; }
 .ai-steps li:not(:last-child)::after { content: ''; height: 1px; background: var(--settings-border); flex: 1; margin: 0 12px 0 5px; }

@@ -6,7 +6,6 @@ import { buildApplyPlan } from '../services/grouping/plan';
 import { AiModelSettings, AiGroupingPreferences } from './AiSettings';
 import { GroupingReview } from './GroupingReview';
 import { AiHistory } from './AiHistory';
-import { PreferenceIcon } from './PreferenceIcon';
 import { Icon } from './Icon';
 import './AiOrganizer.css';
 
@@ -29,7 +28,7 @@ export function AiOrganizer({ settings, onChange, data, flow, aiReady, onClassif
   const selectedCount = selection ? data?.bookmarks.filter(bookmark => !bookmark.readOnly && bookmark.parentId === selection.inboxId && selection.ids.includes(bookmark.id)).length ?? 0 : 0;
   const count = selection ? selectedCount : settings.grouping.scope === 'all' ? total : ungrouped;
   const provider = getProviderConfig(settings.ai.provider);
-  const headingRef = useRef<HTMLHeadingElement>(null);
+  const stepsRef = useRef<HTMLOListElement>(null);
   const modelRef = useRef<HTMLDetailsElement>(null);
   const previousStage = useRef(stage);
   const [classifyMessage, setClassifyMessage] = useState<string | null>(null);
@@ -43,9 +42,9 @@ export function AiOrganizer({ settings, onChange, data, flow, aiReady, onClassif
     if (previousStage.current === stage) return;
     previousStage.current = stage;
     if (stage === 'applying' || view === 'history') return;
-    const scroller = headingRef.current?.closest('.settings-content');
+    const scroller = stepsRef.current?.closest('.settings-content');
     if (scroller) scroller.scrollTop = 0;
-    headingRef.current?.focus({ preventScroll: true });
+    stepsRef.current?.focus({ preventScroll: true });
   }, [stage, view]);
 
   return <div className="ai-organizer">
@@ -55,11 +54,7 @@ export function AiOrganizer({ settings, onChange, data, flow, aiReady, onClassif
     </div>
     {view === 'history' && <AiHistory />}
     <div className="ai-workspace" hidden={view !== 'organize'}>
-    <header className="ai-heading">
-      <PreferenceIcon name="ai" />
-      <div><h2 ref={headingRef} tabIndex={-1}>智能整理</h2><p>按内容归类，先预览，再应用。</p></div>
-    </header>
-    <ol className="ai-steps" aria-label="整理步骤">
+    <ol ref={stepsRef} tabIndex={-1} className="ai-steps" aria-label="整理步骤">
       {['选择范围', '调整方案', '完成整理'].map((title, index) => <li key={title} aria-current={step === index ? 'step' : undefined} data-done={step > index || undefined}>
         <span>{step > index ? <Icon name="check" size={12} /> : index + 1}</span>{title}
       </li>)}

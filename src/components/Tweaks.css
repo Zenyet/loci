@@ -742,31 +742,6 @@
 .settings-url-row + .settings-row {
   border-top: 1px solid var(--settings-border);
 }
-.settings-feature-note {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 17px;
-  margin-bottom: 20px;
-  border-radius: 15px;
-  border: 1px solid var(--settings-border);
-  background: var(--settings-card);
-}
-.settings-feature-note > .preference-icon {
-  width: 42px;
-  height: 42px;
-  flex-shrink: 0;
-}
-.settings-feature-note strong {
-  font-size: 13px;
-  font-weight: 550;
-}
-.settings-feature-note p {
-  font-size: 10.5px;
-  color: var(--fg-2);
-  line-height: 1.6;
-  margin: 5px 0 0;
-}
 .settings-window kbd {
   font-family: inherit;
   font-size: 10px;
@@ -978,13 +953,6 @@
   }
   .settings-row-control {
     margin-left: auto;
-  }
-  .settings-feature-note {
-    padding: 13px;
-    gap: 10px;
-  }
-  .settings-feature-note--ai {
-    flex-wrap: wrap;
   }
   .search-provider-kind {
     display: none;
