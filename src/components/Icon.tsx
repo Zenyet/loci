@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 export type IconName =
   | "inbox"
   | "widgets"
+  | "market"
   | "clock"
   | "weather"
   | "location"
@@ -48,6 +49,7 @@ export function Icon({
   className?: string;
 }) {
   const paths: Record<IconName, ReactNode> = {
+    market: <><path d="M4 4v16h16M7 14l4-4 3 2 6-7" /><path d="M15 5h5v5" /></>,
     inbox: <><path d="m4 4-2 10v5a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-5L20 4Z" fill="currentColor" fillOpacity=".1" /><path d="M2 14h6l2 3h4l2-3h6M8 8h8" /></>,
     widgets: <><rect x="3" y="3" width="7" height="7" rx="2" /><rect x="14" y="3" width="7" height="7" rx="2" /><rect x="3" y="14" width="7" height="7" rx="2" /><path d="M17.5 14v7M14 17.5h7" /></>,
     clock: <><circle cx="12" cy="12" r="8.5" /><path d="M12 7v5l3 2" /></>,

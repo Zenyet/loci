@@ -3,6 +3,7 @@ import {
   useState,
   type InputHTMLAttributes,
   type ReactNode,
+  type TextareaHTMLAttributes,
 } from "react";
 import { Icon } from "./Icon";
 import "./FormControls.css";
@@ -47,4 +48,11 @@ export const TextInput = forwardRef<HTMLInputElement, Props>(function TextInput(
       )}
     </span>
   );
+});
+
+/** Multiline input shares the same field chrome and native editing behavior. */
+export const TextArea = forwardRef<HTMLTextAreaElement, Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, 'onChange'> & { onChange: (value: string) => void }>(function TextArea(
+  { onChange, className = '', disabled, ...props }, ref,
+) {
+  return <span className={`ui-text-field ui-text-field--multiline ${className}`} data-disabled={disabled || undefined}><textarea {...props} ref={ref} disabled={disabled} onChange={event => onChange(event.target.value)} /></span>;
 });

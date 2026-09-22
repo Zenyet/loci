@@ -17,7 +17,7 @@ describe('widget settings migration', () => {
   it('defaults existing installations to opt-in widgets and repairs order without losing city preferences', () => {
     expect(normalizeWidgets(undefined)).toEqual(DEFAULT_SETTINGS.widgets);
     const normalized = normalizeWidgets({ order: ['weather', 'weather', 'invalid'] as never, weather: { enabled: true, city, unit: 'bad' } as never });
-    expect(normalized.order).toEqual(['weather', 'clock', 'todos']);
+    expect(normalized.order).toEqual(['weather', 'clock', 'todos', 'market', 'notes', 'focus', 'revisit']);
     expect(normalized.weather).toEqual({ enabled: true, city, unit: 'celsius' });
     const updated = patchWidgets(normalized, { clock: { enabled: true } });
     expect(updated.weather).toEqual(normalized.weather);

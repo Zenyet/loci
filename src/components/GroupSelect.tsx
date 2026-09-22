@@ -1,6 +1,6 @@
 import { colorCss, colorInk } from '../services/color';
 import type { GroupColor, GroupColors } from '../types';
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Group } from '../types';
 import { folderHue } from '../designs/Graph/folderHue';
 import './GroupSelect.css';
@@ -12,6 +12,8 @@ interface Props {
   looseGroupId?: string | null;
   hueOverrides?: GroupColors;
   onChange: (id: string) => void;
+  label?: string;
+  placeholder?: string;
 }
 
 interface Option {
@@ -29,7 +31,10 @@ export function GroupSelect({
   looseGroupId,
   hueOverrides,
   onChange,
+  label = '选择书签分组',
+  placeholder,
 }: Props) {
+  const menuId = useId();
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -66,22 +71,25 @@ export function GroupSelect({
     return rows;
   }, [groups, hueOverrides, looseGroupId]);
 
-  const selected = options.find((o) => o.id === value) ?? options[0] ?? null;
+  const selected = options.find((o) => o.id === value) ?? (placeholder ? null : options[0]) ?? null;
 
   useLayoutEffect(() => {
     if (!open) return;
     const placeMenu = () => {
       const anchor = buttonRef.current?.getBoundingClientRect();
       if (!anchor || !menuRef.current) return;
-      const below = window.innerHeight - anchor.bottom - 14;
-      const above = anchor.top - 14;
+      const boundary = buttonRef.current?.closest('[role="dialog"]')?.getBoundingClientRect();
+      const below = Math.min(window.innerHeight, boundary?.bottom ?? window.innerHeight) - anchor.bottom - 14;
+      const above = anchor.top - Math.max(0, boundary?.top ?? 0) - 14;
       const needed = Math.min(280, menuRef.current.scrollHeight);
       const upward = below < needed && above > below;
       setPlacement({ upward, maxHeight: Math.max(80, Math.min(280, upward ? above : below)) });
     };
     placeMenu();
     window.addEventListener('resize', placeMenu);
-    return () => window.removeEventListener('resize', placeMenu);
+    const onScroll = (event: Event) => { if (!menuRef.current?.contains(event.target as Node)) placeMenu(); };
+    document.addEventListener('scroll', onScroll, true);
+    return () => { window.removeEventListener('resize', placeMenu); document.removeEventListener('scroll', onScroll, true); };
   }, [open, options.length]);
 
   useEffect(() => {
@@ -125,6 +133,8 @@ export function GroupSelect({
       return;
     }
     if (!open) return;
+    if (e.key === 'Tab') { setOpen(false); return; }
+    if (e.key === 'Home' || e.key === 'End') { e.preventDefault(); setActiveIndex(e.key === 'Home' ? 0 : options.length - 1); return; }
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       setActiveIndex((i) => Math.min(options.length - 1, i + 1));
@@ -152,8 +162,10 @@ export function GroupSelect({
         type="button"
         className="group-select__trigger"
         aria-haspopup="listbox"
+        aria-label={label}
         aria-expanded={open}
-        aria-controls="bookmark-group-select-list"
+        aria-controls={open ? menuId : undefined}
+        aria-activedescendant={open ? `${menuId}-${activeIndex}` : undefined}
         disabled={options.length === 0}
         onClick={() => setOpen((v) => !v)}
         onKeyDown={onTriggerKeyDown}
@@ -161,7 +173,7 @@ export function GroupSelect({
         <GroupMark option={selected} />
         <span className="group-select__main">
           <span className="group-select__label">
-            {selected?.label ?? '没有可选分组'}
+            {selected?.label ?? placeholder ?? '没有可选分组'}
           </span>
           {selected && <span className="group-select__meta">{selected.meta}</span>}
         </span>
@@ -171,7 +183,7 @@ export function GroupSelect({
       {open && (
         <div
           ref={menuRef}
-          id="bookmark-group-select-list"
+          id={menuId}
           className="group-select__menu"
           style={{
             top: placement.upward ? 'auto' : 'calc(100% + 6px)',
@@ -179,12 +191,13 @@ export function GroupSelect({
             maxHeight: placement.maxHeight,
           }}
           role="listbox"
-          aria-label="选择书签分组"
+          aria-label={label}
         >
           {options.length > 0 ? (
             options.map((option, index) => (
               <button
                 key={option.id}
+                id={`${menuId}-${index}`}
                 type="button"
                 role="option"
                 aria-selected={option.id === value}

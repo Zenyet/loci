@@ -39,7 +39,13 @@ export interface BookmarkRoot {
   readOnly: boolean;
 }
 
-export type WidgetId = 'clock' | 'weather' | 'todos';
+export type WidgetId = 'clock' | 'weather' | 'todos' | 'market' | 'notes' | 'focus' | 'revisit';
+export type WidgetToolId = Exclude<WidgetId, 'clock' | 'weather'>;
+export interface MarketInstrument {
+  kind: 'index' | 'stock';
+  code: string;
+  name: string;
+}
 export interface WeatherCity {
   id: number;
   name: string;
@@ -51,9 +57,21 @@ export interface WeatherCity {
 export interface WidgetSettings {
   version: 1;
   order: WidgetId[];
+  pinned: WidgetToolId[];
   clock: { enabled: boolean; hour12: boolean };
   weather: { enabled: boolean; city: WeatherCity | null; unit: 'celsius' | 'fahrenheit' };
   todos: { enabled: boolean };
+  notes: { enabled: boolean };
+  focus: { enabled: boolean; minutes: number };
+  revisit: { enabled: boolean; folderId: string };
+  market: {
+    enabled: boolean;
+    /** Personal Tushare credential, stored in local settings only. */
+    token: string;
+    watchlist: MarketInstrument[];
+    summary: string;
+    colors: 'red-up' | 'green-up' | 'mono';
+  };
   calendar: { showLunar: boolean; showHolidays: boolean };
 }
 
@@ -196,10 +214,15 @@ export interface Settings {
 export const DEFAULT_SETTINGS: Settings = {
   widgets: {
     version: 1,
-    order: ['clock', 'weather', 'todos'],
+    order: ['clock', 'weather', 'todos', 'market', 'notes', 'focus', 'revisit'],
+    pinned: ['todos'],
     clock: { enabled: false, hour12: false },
     weather: { enabled: false, city: null, unit: 'celsius' },
     todos: { enabled: false },
+    notes: { enabled: false },
+    focus: { enabled: false, minutes: 25 },
+    revisit: { enabled: false, folderId: '' },
+    market: { enabled: false, token: '', watchlist: [], summary: 'index:000001.SH', colors: 'red-up' },
     calendar: { showLunar: true, showHolidays: true },
   },
   theme: "light",

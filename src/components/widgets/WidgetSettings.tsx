@@ -1,20 +1,23 @@
 import { useState } from 'react';
-import type { WidgetId, WidgetSettings as WidgetPreferences } from '../../types';
+import type { WidgetId, WidgetToolId, WidgetSettings as WidgetPreferences } from '../../types';
 import { patchWidgets, widgetCardOrder } from '../../services/widgetSettings';
 import { requestWeatherPermission } from '../../services/weather';
 import { HOLIDAY_YEARS } from '../../data/holidays';
 import { Icon } from '../Icon';
 import { SettingGroup, SettingRow, Switch } from '../SettingsControls';
 import { CityPicker } from './CityPicker';
+import { WIDGET_CATALOG } from './catalog';
+import { Select } from '../Select';
+import { MarketConnection } from './MarketWidget';
 import './widgets.css';
 
-const labels = { clock: '时间与天气', todos: '今日待办' };
-const descriptions = { clock: '时间、日期和窗外的天气，收在一张小卡片里', todos: '记下接下来要做的几件小事' };
+const labels = Object.fromEntries(Object.entries(WIDGET_CATALOG).map(([id, item]) => [id, item.title]));
 
 export function WidgetSettings({ value, onChange }: { value: WidgetPreferences; onChange: (next: WidgetPreferences) => void }) {
   const [error, setError] = useState<string | null>(null);
   const [granting, setGranting] = useState(false);
   const cards = widgetCardOrder(value);
+  const visibleCards = cards.filter(id => id === 'clock' || id === 'todos' || value[id].enabled);
   const toggle = async (id: WidgetId, enabled: boolean) => {
     setError(null);
     if (id === 'weather' && enabled) {
@@ -24,19 +27,26 @@ export function WidgetSettings({ value, onChange }: { value: WidgetPreferences; 
       catch { setError('无法获取天气服务权限，请重试。'); return; }
       finally { setGranting(false); }
     }
-    onChange(patchWidgets(value, { [id]: { enabled } }));
+    const pinned = id !== 'clock' && id !== 'weather' && enabled ? [...new Set([...value.pinned.filter(item => value[item].enabled), id])].slice(0, 3) as WidgetToolId[] : value.pinned;
+    onChange(patchWidgets(value, { [id]: { enabled }, pinned }));
   };
   const reorder = (id: Exclude<WidgetId, 'weather'>, direction: number) => {
-    const order = [...cards]; const index = order.indexOf(id); const next = index + direction;
-    if (next < 0 || next >= order.length) return;
-    [order[index], order[next]] = [order[next], order[index]];
+    const order = [...cards]; const index = visibleCards.indexOf(id); const next = index + direction;
+    if (next < 0 || next >= visibleCards.length) return;
+    const from = order.indexOf(id); const to = order.indexOf(visibleCards[next]);
+    [order[from], order[to]] = [order[to], order[from]];
     onChange(patchWidgets(value, { order: order.flatMap<WidgetId>(item => item === 'clock' ? ['clock', 'weather'] : [item]) }));
   };
   return <div className="widget-preferences">
-    <p className="widget-note">时间与天气共用一张卡片，可分别开启；日期始终保留。用箭头调整卡片顺序。</p>
+    <div className="widget-library-heading"><h2>给日常，添一点顺手</h2><p className="widget-note">按需添加，关闭时保留数据。首页最多固定 3 个工具，其余收进「更多」。</p></div>
+    <div className="widget-catalog" aria-label="添加新小组件">{(['market', 'notes', 'focus', 'revisit'] as const).map(id => <article className="widget-catalog-card" key={id}>
+      <div><Icon name={WIDGET_CATALOG[id].icon} size={23} /><small>{WIDGET_CATALOG[id].category}</small></div><h3>{labels[id]}</h3><p>{WIDGET_CATALOG[id].description}</p>
+      <button type="button" className="widget-catalog-add" disabled={value[id].enabled} onClick={() => void toggle(id, true)}>{value[id].enabled ? '已添加' : '＋ 添加'}</button>
+    </article>)}</div>
+    <p className="widget-note">时间与天气共用一张卡片，日期始终保留。用箭头调整组件顺序。</p>
     {error && <p role="alert" className="widget-error">{error}</p>}
-    {cards.map((id, index) => <section className="widget-option" key={id} aria-label={`${labels[id]}设置`}>
-      <div className="widget-option__head"><span className={`widget-option__icon widget-option__icon--${id}`}><Icon name={id === 'todos' ? 'todo' : id} size={21} /></span><div><h3>{labels[id]}</h3><p>{descriptions[id]}</p></div>{id === 'todos' && <Switch label="显示今日待办" checked={value.todos.enabled} onChange={enabled => void toggle(id, enabled)} />}</div>
+    {visibleCards.map((id, index) => { return <section className="widget-option" key={id} aria-label={`${labels[id]}设置`}>
+      <div className="widget-option__head"><span className={`widget-option__icon widget-option__icon--${id}`}><Icon name={WIDGET_CATALOG[id].icon} size={21} /></span><div><h3>{labels[id]}</h3><p>{WIDGET_CATALOG[id].description}</p></div>{id !== 'clock' && <Switch label={`显示${labels[id]}`} checked={value[id].enabled} onChange={enabled => void toggle(id, enabled)} />}</div>
       {id === 'clock' && <SettingRow title="显示时间"><Switch label="显示时间" checked={value.clock.enabled} onChange={enabled => void toggle('clock', enabled)} /></SettingRow>}
       {id === 'clock' && value.clock.enabled && <SettingRow title="12 小时制"><Switch label="12 小时制" checked={value.clock.hour12} onChange={hour12 => onChange(patchWidgets(value, { clock: { hour12 } }))} /></SettingRow>}
       {id === 'clock' && <>
@@ -51,8 +61,16 @@ export function WidgetSettings({ value, onChange }: { value: WidgetPreferences; 
         <p className="widget-note">查询城市与天气时会连接 Open-Meteo，发送城市关键词或所选城市坐标。</p>
       </div>}
       {id === 'todos' && value.todos.enabled && <p className="widget-option__body widget-note">待办保存在本机，可在多个新标签页之间同步。</p>}
-      <footer className="widget-option__footer"><span>{index + 1} / {cards.length}</span><button type="button" disabled={index === 0} aria-label={`上移${labels[id]}`} onClick={() => reorder(id, -1)}>↑</button><button type="button" disabled={index === cards.length - 1} aria-label={`下移${labels[id]}`} onClick={() => reorder(id, 1)}>↓</button></footer>
-    </section>)}
+      {id !== 'clock' && value[id].enabled && <SettingRow title="固定到首页" hint="窄屏仅显示第一个固定工具，其余可在更多中打开"><Switch label={`将${labels[id]}固定到首页`} checked={value.pinned.includes(id)} onChange={pinned => {
+        if (pinned && value.pinned.filter(item => value[item].enabled).length >= 3) { setError('首页最多固定 3 个工具，请先取消其他工具的固定。'); return; }
+        setError(null); onChange(patchWidgets(value, { pinned: pinned ? [...value.pinned.filter(item => value[item].enabled), id] : value.pinned.filter(item => item !== id) }));
+      }} /></SettingRow>}
+      {id === 'market' && <div className="widget-option__body"><MarketConnection value={value.market} onChange={market => onChange(patchWidgets(value, { market }))} /><SettingRow title="涨跌颜色"><Select label="涨跌颜色" value={value.market.colors} onChange={colors => onChange(patchWidgets(value, { market: { colors: colors as typeof value.market.colors } }))} options={[{ value: 'red-up', label: '红涨绿跌' }, { value: 'green-up', label: '绿涨红跌' }, { value: 'mono', label: '单色' }]} /></SettingRow></div>}
+      {id === 'notes' && <p className="widget-option__body widget-note">自动保存到本机，可复制内容或把一行转为待办。</p>}
+      {id === 'focus' && <p className="widget-option__body widget-note">当前专注时长 {value.focus.minutes} 分钟。可在组件内调整时长、关联待办，刷新后恢复计时。</p>}
+      {id === 'revisit' && <p className="widget-option__body widget-note">打开组件选择回访文件夹，每天发现一条收藏。</p>}
+      <footer className="widget-option__footer"><span>{index + 1} / {visibleCards.length}</span><button type="button" disabled={index === 0} aria-label={`上移${labels[id]}`} onClick={() => reorder(id, -1)}>↑</button><button type="button" disabled={index === visibleCards.length - 1} aria-label={`下移${labels[id]}`} onClick={() => reorder(id, 1)}>↓</button></footer>
+    </section>; })}
     <SettingGroup title="恰到好处"><p className="widget-note widget-option__body">信息收在页面边缘，需要时再展开。关闭小组件会保留它的设置与本地数据。</p></SettingGroup>
   </div>;
 }

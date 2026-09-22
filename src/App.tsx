@@ -63,7 +63,7 @@ export default function App() {
           inboxCount={inbox.bookmarks.length} onOpenInbox={() => setInboxOpen(true)} />
           : <ExtensionState title="无法读取 Chrome 书签" body={error ?? '请刷新新标签页，或确认扩展权限仍然开启。'} actionLabel="重试" onAction={refresh} />}
       </div>
-      <WidgetDashboard settings={settings.widgets} onChange={widgets => update({ widgets })}
+      <WidgetDashboard chromeData={data ?? undefined} settings={settings.widgets} onChange={widgets => update({ widgets })}
         blocked={tweaksOpen || inboxOpen} onPanelChange={setWidgetPanelOpen}
         onConfigure={() => { setRequestedSection({ section: 'widgets', revision: Date.now() }); setTweaksOpen(true); }} />
       <Tweaks
