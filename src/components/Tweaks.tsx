@@ -28,6 +28,7 @@ import { WidgetSettings } from './widgets/WidgetSettings';
 import { useSurfaceDismiss } from '../hooks/useSurfaceDismiss';
 import { TextInput } from "./TextInput";
 import { Slider } from "./Slider";
+import { CloseButton } from "./CloseButton";
 import "./Tweaks.css";
 
 interface Props {
@@ -325,15 +326,8 @@ export function Tweaks({
           >
             <aside className="settings-sidebar">
               <div className="settings-window-controls">
-                <button
-                  type="button"
-                  className="window-close"
-                  onClick={onToggle}
-                  aria-label="关闭设置"
-                >
-                  <Icon name="close" size={10} />
-                </button>
                 <span className="window-caption">设置</span>
+                <CloseButton onClick={onToggle} className="settings-window-close" label="关闭设置" />
               </div>
               <div className="settings-search">
                 <TextInput

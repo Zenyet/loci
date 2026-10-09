@@ -56,35 +56,26 @@
 .settings-window-controls {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
   padding: 12px 7px;
   flex-shrink: 0;
 }
-.window-close {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  border: 1px solid rgb(0 0 0 / 9%);
-  flex-shrink: 0;
+.settings-window-close {
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  color: var(--fg-2);
+  background: transparent;
 }
-.window-close {
-  background: #ff6058;
-  display: grid;
-  place-items: center;
-  padding: 0;
-  color: #7b1e17;
-}
-.window-close svg {
-  opacity: 0;
-}
-.window-close:hover svg,
-.window-close:focus-visible svg {
-  opacity: 1;
+.settings-window-close:hover,
+.settings-window-close:focus-visible {
+  color: var(--fg);
+  background: var(--ui-muted-bg);
 }
 .window-caption {
   font-size: 11px;
   color: var(--fg-2);
-  margin-left: auto;
 }
 .settings-search {
   display: flex;
@@ -983,74 +974,9 @@ body[data-reduce-motion="1"] .settings-window * {
   transition: none;
 }
 
-/* Reduced window chrome, with a single jewel-like Aqua close control. */
+/* Compact window chrome keeps the settings header quiet and easy to scan. */
 .settings-window {
   height: min(684px, calc(100dvh - 56px));
-}
-.window-close {
-  position: relative;
-  isolation: isolate;
-  width: 17px;
-  height: 17px;
-  border-radius: 50%;
-  border: 1px solid rgb(147 37 40 / 48%);
-  color: #80151e;
-  background:
-    radial-gradient(ellipse at 50% 92%, #ffdad1b3 0%, transparent 57%),
-    linear-gradient(180deg, #f8948e 0%, #f45853 45%, #e33735 58%, #f77568 100%);
-  box-shadow:
-    inset 0 1px 1px #fff9,
-    inset 0 -1px 2px #a6192d60,
-    0 0 0 1px #fff5,
-    0 2px 4px #8e282b26;
-  transition:
-    box-shadow 140ms ease,
-    filter 140ms ease,
-    transform 140ms ease;
-}
-.window-close::before {
-  content: "";
-  position: absolute;
-  left: 2px;
-  right: 2px;
-  top: 1px;
-  height: 6px;
-  border-radius: 50% 50% 44% 44%;
-  background: linear-gradient(#ffffffd9, #ffffff10);
-  pointer-events: none;
-}
-.window-close::after {
-  content: "";
-  position: absolute;
-  inset: -7px;
-  border-radius: 50%;
-}
-.window-close svg {
-  position: relative;
-  z-index: 1;
-  width: 12px;
-  height: 12px;
-  transition: opacity 120ms;
-  filter: drop-shadow(0 1px 0 #ffffff50);
-}
-.window-close:hover {
-  filter: saturate(1.15);
-  box-shadow:
-    inset 0 1px 1px #fff9,
-    inset 0 -1px 2px #a6192d60,
-    0 0 0 3px #e9645714,
-    0 2px 4px #8e282b26;
-}
-.window-close:active {
-  transform: scale(0.92);
-  filter: brightness(0.93);
-}
-[data-theme="dark"] .window-close {
-  box-shadow:
-    inset 0 1px 1px #fffb,
-    inset 0 -1px 2px #92162380,
-    0 0 0 1px #0004,
-    0 2px 6px #0003;
 }
 .window-caption {
   font-size: 12px;
