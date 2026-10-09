@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Loci · Chrome Web Store 宣传图</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; }
+    body { color: #282724; background: #f1e7dc url('./golden-gate.svg') center / cover; font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif; }
+    body::before { content: ''; position: absolute; inset: 0; background: linear-gradient(120deg, #f8f5edc9, #f6ebe15c 65%, transparent); }
+    main { position: relative; height: 100%; }
+    .copy { position: absolute; inset: 33px auto auto 32px; }
+    h1 { font-size: 62px; font-weight: 650; letter-spacing: -3.5px; line-height: 1; margin: 0; }
+    .tagline { font-size: 19px; letter-spacing: -.3px; line-height: 1.5; margin: 20px 0 0; font-weight: 500; }
+    .tagline span { display: block; }
+    .category { position: absolute; left: 33px; bottom: 26px; margin: 0; font-size: 12px; letter-spacing: 2px; color: #3f4547; }
+    .brand-icon { position: absolute; right: 30px; top: 48px; width: 116px; height: 116px; filter: drop-shadow(0 16px 24px #462e271f); }
+    .preview { display: none; }
+    @media (min-width: 700px) {
+      .copy { top: 175px; left: 70px; }
+      h1 { font-size: 91px; letter-spacing: -5px; }
+      .tagline { font-size: 35px; line-height: 1.45; margin-top: 25px; letter-spacing: -.7px; }
+      .tagline span { display: inline; }
+      .category { left: 74px; bottom: 62px; font-size: 15px; letter-spacing: 3px; }
+      .brand-icon { top: 66px; left: 74px; right: auto; width: 68px; height: 68px; }
+      .preview { display: block; position: absolute; left: 605px; top: 68px; width: 752px; height: 470px; border: 7px solid #fff9; border-radius: 18px; box-shadow: 0 26px 70px #4a332c30; object-fit: cover; }
+    }
+  </style>
+</head>
+<body>
+  <main aria-label="Loci 书签图谱新标签页">
+    <div class="copy"><h1>Loci</h1><p class="tagline">让收藏，<span>再次被看见。</span></p></div>
+    <img class="brand-icon" src="./icon-128.png" alt="Loci 图标">
+    <p class="category">书签图谱 · 新标签页</p>
+    <img class="preview" src="../screenshots/01-bookmark-graph.jpg" alt="Loci 书签图谱实际界面">
+  </main>
+</body>
+</html>

@@ -1,0 +1,38 @@
+Name
+Loci
+
+Short description
+Turn your bookmarks into a visual new tab, with fast search, folders and optional everyday tools.
+
+Detailed description (copy from the next line)
+Bring your saved pages back into view.
+
+Loci turns your Chrome new tab into a bookmark graph. Explore folders, search for a website, and save pages to an inbox to organize later.
+
+Explore and organize
+• Pan and zoom through your bookmarks and folders.
+• Open a folder to explore its contents, or click a bookmark to visit it.
+• Search titles, URLs and groups. Use Ctrl / Cmd + K to open search.
+• Create, edit and move bookmarks using Chrome's own bookmark system.
+• Access frequent sites and recent visits from the new tab.
+
+Save now, organize later
+• Use the Loci toolbar button to save the current page.
+• Collect pages in an inbox, then move them into folders.
+• Optionally connect your own AI provider and API key for suggested organization. Review the plan before applying it.
+
+Make room for everyday tools
+• A calendar with lunar dates and the included 2026 mainland China holiday schedule.
+• Local notes and tasks, with a way to turn a note into a task.
+• A focus timer that can be linked to a task.
+• Bookmark rediscovery from your existing collection.
+• Optional weather with manual city selection or a location request you initiate.
+• Optional mainland China market snapshots using your own Tushare connection.
+• Background, appearance and widget settings, with up to three pinned tools.
+
+Local-first, optional connections
+Core bookmark features do not require a Loci account. Settings, tasks, notes and timer state stay on your device. Bookmarks remain in Chrome's bookmark system; Chrome account settings control bookmark sync.
+
+AI, weather and market data are optional. AI requires your own service configuration and API key; requested operations send relevant bookmark titles, domains and organization data to that provider. Weather uses Open-Meteo, and an explicit location request uses BigDataCloud. Market data requires your own Tushare Token and the appropriate endpoint access. Third-party services may have separate quotas or fees. Loci does not execute securities trades.
+
+The interface is currently primarily in Simplified Chinese. Listing screenshots use sample bookmarks and manually enabled widgets.

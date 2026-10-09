@@ -1,0 +1,38 @@
+Loci 0.1.3 · Chrome Web Store 更新材料
+
+上传什么
+1. 扩展程序包：loci-0.1.3.zip。只把这个 ZIP 上传到现有扩展的 Package / Upload new package。
+2. 商品截图：screenshots/01 到 05，按文件名前缀排序。5 张均为 1280×800 JPG 原始界面截图。
+3. 小宣传图：promo/promo-440x280.jpg（必需规格）。
+4. 大宣传图：promo/marquee-1400x560.jpg（可选）。
+5. 图标：icon-128.png。
+6. 文案：listing-zh-CN.txt / listing-en.txt，复制对应字段的正文；英文文案不代表英文 UI 已实现。
+7. 隐私与审核：privacy-fields.txt、reviewer-notes.txt；privacy.html 是可公开托管的隐私页面。
+
+更新顺序
+• 进入现有 Loci 商品，先核对已上传的最高版本号。此包从仓库 0.1.2 递增至 0.1.3；尚未拿到实际商店链接/版本。只有当 0.1.3 大于商店已上传版本时，才能用此包更新。
+• 上传扩展 ZIP；材料 ZIP 不是扩展包，不要传到 Package 字段。
+• 更新商店介绍、截图与宣传图。名称继续使用 Loci。
+• 将本版隐私政策同步至已有公开 HTTPS 页面，确认退出登录后可访问，再在后台填写该地址。
+• 核对权限理由、远程代码和数据使用披露。由发布者完成后台声明与提交审核。
+• 选择你的发布方式。此材料准备过程没有替你提交审核或发布。
+
+已做验证
+• 版本、构建与测试结果见 BUILD-INFO.txt。
+• ZIP 根目录包含 manifest.json，包内文件通过完整性检查。
+• 截图尺寸逐张检查；截图来自隔离的本地预览、示例书签及手动添加的待办/便签。
+• 浏览器 UI 已实测：搜索、进入文件夹、打开管理面板、开启小组件、待办输入、便签自动保存与日历展开。
+
+上传前的 Chrome 验证
+本次截图预览没有使用真实 Chrome 扩展 API。建议先在独立 Chrome 测试资料中通过 chrome://extensions → 开发者模式 → 加载解压后的扩展，选择解压后的扩展目录，检查新标签页、现有书签读取、工具栏收藏、收件箱归档和可选权限拒绝后的状态。也检查从你当前商店版更新后原有书签与设置保留情况。AI 与行情没有使用付费凭据进行真实 API 测试。
+
+素材说明
+• 01：书签图谱；02：搜索；03：分组管理；04：日历；05：便签。
+• 时间、日期和示例数据为拍摄当时的实际 UI 内容，不包含私人书签。
+• 宣传图是品牌素材；五张商品截图为完整界面，没有叠加不存在的功能或伪造服务结果。
+• 宣传图 HTML 源文件在 sources/，同目录保留图标与壁纸资源，可再导出其他尺寸。
+
+官方规格与上传流程（2026-10-09 核对）
+https://developer.chrome.com/docs/webstore/images
+https://developer.chrome.com/docs/webstore/update
+https://developer.chrome.com/docs/webstore/cws-dashboard-privacy

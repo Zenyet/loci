@@ -1,0 +1,23 @@
+Reviewer notes — Loci 0.1.3
+
+Purpose
+A visual Chrome-bookmark workspace that replaces the new tab. Core features do not require a Loci account or subscription. The current UI is primarily Simplified Chinese.
+
+Core review steps
+1. Install the uploaded package and open a new tab. Existing Chrome bookmarks/folders populate the graph. On an empty profile, add a few ordinary test bookmarks first.
+2. Click a folder to explore it; click a bookmark to open the website. Pan the background and use the mouse wheel to zoom.
+3. Click the search button or press Ctrl/Cmd+K. Search a known bookmark title, URL or folder name. Use arrow keys and Enter; Escape closes search.
+4. Click 管理 (Manage) to inspect folders and bookmark organization.
+5. On an ordinary HTTPS page, click the Loci toolbar action. Review the prefilled title/URL and save a test bookmark to the inbox, then archive it manually.
+6. Open 设置 (Settings) → 小组件 (Widgets). Enable notes, tasks, focus or bookmark rediscovery. These features are local and need no external account. Date is available by default; click it for the calendar.
+
+Optional connections
+• AI: Settings → 智能整理. A user-supplied provider URL/model/API key is required. Test the connection, request a plan for test bookmarks, inspect the preview, then apply only if desired. The listing does not promise an included AI service. Provider quotas and costs are external to Loci.
+• Weather: Enable weather in widget settings and grant the Open-Meteo optional host permission when requested. Search for a city manually. Device location is requested only from the current-location button and requires the separate BigDataCloud optional permission.
+• Market: Add 市场速览 and connect a user-supplied Tushare Token. Index and stock quote endpoints require corresponding Tushare access. A missing token or insufficient access produces a connection/access state; no fake quotes or bundled credentials are provided. There is no trading functionality.
+
+Data and implementation
+There are no injected content scripts or persistent tabs permission. activeTab supplies the title/URL for the toolbar save action. Core preferences and widget state are local; Chrome controls bookmark synchronization. Executable code is bundled. Optional providers return data, not executable code. The privacy policy describes each external request.
+
+Screenshots
+Captured from the same application UI in an isolated local development preview with built-in example bookmarks and manually enabled widgets. They contain no personal account or key. Chrome-specific permission prompts and toolbar APIs must be reviewed in the installed extension. The images do not demonstrate paid AI or market-data results.

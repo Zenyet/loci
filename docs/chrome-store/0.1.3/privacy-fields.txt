@@ -1,0 +1,59 @@
+Chrome Web Store 隐私字段填写参考 · Loci 0.1.3
+基于 public/manifest.json 和当前源码。与商店实际字段及已公开的隐私政策核对后填写。
+
+单一用途 / Single purpose（可粘贴）
+Loci replaces the Chrome new tab with a visual bookmark workspace for finding, opening, saving and organizing the user's Chrome bookmarks. Optional compact widgets support the user's activity within the same new-tab workspace.
+
+权限理由（每段填入对应权限）
+
+bookmarks
+Reads Chrome bookmarks and folders to render the visual new-tab workspace. Creates, renames, moves and removes bookmarks or folders only for user-requested organization and saving actions. The toolbar save form writes the current page to the selected folder or the Loci inbox.
+
+history
+Reads recent browsing history locally to show recent visits and calculate visit-based bookmark weights in the graph. Browsing history is not sent to AI, weather or market-data providers.
+
+topSites
+Reads Chrome's frequently visited sites as a fallback when there are no bookmarks to display in the new-tab workspace.
+
+storage
+Stores local preferences, graph connections and positions, inbox identifiers, widget data, API configuration and bounded AI operation history. This supports persistent settings and shared state across the user's new-tab pages.
+
+activeTab
+When the user clicks Loci's toolbar action, temporarily reads the active tab's title and URL to prefill the bookmark save form. Does not read page body text, inject content scripts or continuously enumerate tabs.
+
+geolocation
+Used only when the user explicitly clicks the current-location button in the weather city picker. One location request identifies the weather city through BigDataCloud; subsequent weather requests use saved approximate city coordinates. No continuous or page-load location tracking. Manual city selection remains available.
+
+可选主机权限（后台若合并为一个字段，可合并下列说明）
+
+https://geocoding-api.open-meteo.com/*
+Optional access for city search when the user enables weather. Sends the entered city name to Open-Meteo to return matching cities.
+
+https://api.open-meteo.com/*
+Optional access to fetch weather for the city chosen by the user. Sends the city coordinates, units and requested weather fields. No bookmarks, history or notes are included.
+
+https://api.bigdatacloud.net/*
+Optional access requested only for the user-initiated current-location action. Sends a one-time location to identify the weather city. Loci stores only the city and rounded coordinates. Manual city search does not require this host permission.
+
+https://api.tushare.pro/*
+Optional access requested when the user connects the market widget with their own Tushare Token. Requests supported index/stock snapshots and trading-calendar data using that token. No brokerage accounts, holdings, transactions, bookmarks or browsing history are sent.
+
+远程代码
+选择：No, I am not using remote code.
+说明：Executable JavaScript and CSS are bundled in the extension. Optional API requests retrieve data; AI responses are parsed as data for a preview/organization workflow and are not executed as code. Remote website icons and user-selected background images are image resources.
+
+数据使用：逐项对应，而非直接选“完全不处理数据”
+• Web history：读取最近访问用于本地展示/权重；书签 URL 用于管理，主动 AI 操作会发送相关标题、域名和分组信息。代码不向外传输原始浏览历史。
+• Website content：处理当前页标题与 URL、书签标题；不抓取网页正文。主动 AI 操作可能发送书签标题。
+• Location：主动定位时发送一次坐标给 BigDataCloud，天气发送所选城市坐标给 Open-Meteo；网络服务也会收到 IP。
+• Authentication information：用户提供的模型 API Key / Tushare Token 本机保存，并用于向用户选择的对应服务认证；不读取网站密码或 cookies。
+以上四类需在当前后台定义下如实披露，包括可选功能，不能因为数据发给第三方而遗漏。浏览历史的本地使用与书签数据的可选外发须分开说明。
+
+未设计收集：姓名/邮箱/证件等身份资料、健康信息、支付/证券账户或交易记录、私人通信、点击/鼠标/键盘行为分析日志。用户写在便签与待办中的任意文字仅本地保存，不用于远程分析。
+本版本代码没有广告、数据出售、广告画像或信用/借贷评估用途。后台的政策认证属于发布者声明，应由发布账号持有人核对后勾选。
+
+隐私政策网址
+使用你现有的、无需登录可访问的 HTTPS 隐私政策地址，并更新到此版本的 privacy.html 内容。仓库的公开访问尚未确认，不要将本地文件路径或未经验证的 GitHub 地址粘贴到商店。
+
+官方参考（2026-10-09 核对）
+https://developer.chrome.com/docs/webstore/cws-dashboard-privacy
