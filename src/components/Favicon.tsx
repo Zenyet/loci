@@ -36,10 +36,10 @@ export function Favicon({ bookmark, size = 22, fontSize = 10, radius = 5, style 
   }, [bookmark.url]);
 
   useEffect(() => {
-    if (!src) return;
+    if (!src || ok) return;
     const t = window.setTimeout(() => setAttempt((i) => i + 1), FAVICON_ATTEMPT_TIMEOUT_MS);
     return () => window.clearTimeout(t);
-  }, [src, attempt]);
+  }, [src, attempt, ok]);
 
   const base: CSSProperties = {
     width: size,
