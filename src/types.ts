@@ -40,6 +40,9 @@ export interface BookmarkRoot {
 }
 
 export type WidgetId = 'clock' | 'weather' | 'todos' | 'market' | 'notes' | 'focus' | 'revisit';
+export type DesktopWidgetId = WidgetId | 'calendar';
+export type WidgetSize = 'small' | 'medium' | 'large';
+export interface WidgetPlacement { x: number; y: number; size: WidgetSize; coordinateSpace?: 'viewport' }
 export type WidgetToolId = Exclude<WidgetId, 'clock' | 'weather'>;
 export interface MarketInstrument {
   kind: 'index' | 'stock';
@@ -72,7 +75,8 @@ export interface WidgetSettings {
     summary: string;
     colors: 'red-up' | 'green-up' | 'mono';
   };
-  calendar: { showLunar: boolean; showHolidays: boolean };
+  calendar: { enabled: boolean; showLunar: boolean; showHolidays: boolean };
+  desktop: { appearance: 'auto' | 'light' | 'dark' | 'tinted'; layout: Partial<Record<DesktopWidgetId, WidgetPlacement>> };
 }
 
 export interface GraphItem extends Bookmark {
@@ -186,15 +190,14 @@ export interface Settings {
   accentHue: number;
   density: Density;
   bg: BgPattern;
-  /** Only used when `bg === 'image'`. A data URL (uploaded) or remote URL. */
+  /** Only used when `bg === 'image'`. A durable local image reference, built-in path, gradient or remote URL. */
   bgImage: string | null;
   /** 0..1. Darkening overlay on top of the background image so foreground
    *  text stays legible. */
   bgImageDim: number;
+  bingWallpaper: boolean;
   /** Shorter force-graph and search zoom animations. */
   reduceMotion: boolean;
-  /** Show the floating “frequent / recent” strip at the bottom. */
-  showStrip: boolean;
   /** Draw explicit links and relationships (opened folder / topic / host / domain). */
   showEdges: boolean;
   /** Open bookmark URLs in a new tab; if false, navigate the current tab. */
@@ -223,7 +226,8 @@ export const DEFAULT_SETTINGS: Settings = {
     focus: { enabled: false, minutes: 25 },
     revisit: { enabled: false, folderId: '' },
     market: { enabled: false, token: '', watchlist: [], summary: 'index:000001.SH', colors: 'red-up' },
-    calendar: { showLunar: true, showHolidays: true },
+    calendar: { enabled: true, showLunar: true, showHolidays: true },
+    desktop: { appearance: 'auto', layout: {} },
   },
   theme: "light",
   accentHue: 260,
@@ -231,8 +235,8 @@ export const DEFAULT_SETTINGS: Settings = {
   bg: "image",
   bgImage: GOLDEN_GATE_BACKGROUND,
   bgImageDim: 0.12,
+  bingWallpaper: false,
   reduceMotion: false,
-  showStrip: true,
   showEdges: true,
   openInNewTab: true,
   searchProvider: "google",

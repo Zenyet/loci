@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import type { WidgetSettings } from '../../types';
 import { addDays, CALENDAR_MAX, CALENDAR_MIN, clampDate, dayDescription, festivals, formatCalendarDate,
   holidayOn, holidayYear, localDateKey, lunarDate, monthDays, moveMonth, nextHoliday, weekday } from '../../services/calendar';
@@ -7,7 +7,8 @@ import './calendar.css';
 
 const WEEKDAYS = ['一', '二', '三', '四', '五', '六', '日'];
 
-export function CalendarWidget({ now, settings }: { now: Date; settings: WidgetSettings['calendar'] }) {
+export function CalendarWidget({ now, settings, compact = false }: { now: Date; settings: Pick<WidgetSettings['calendar'], 'showLunar' | 'showHolidays'>; compact?: boolean }) {
+  const uid = useId();
   const today = localDateKey(now);
   const [selected, setSelected] = useState(() => clampDate(today));
   const month = selected.slice(0, 7);
@@ -57,16 +58,16 @@ export function CalendarWidget({ now, settings }: { now: Date; settings: WidgetS
     event.preventDefault(); event.stopPropagation(); move(next, true);
   };
 
-  return <div className="calendar-widget">
+  return <div className={`calendar-widget${compact ? " calendar-widget--compact" : ""}`}>
     <div className="calendar-heading">
-      <h2 id="calendar-month" aria-live="polite">{monthLabel}</h2>
+      <h2 id={`${uid}-month`} aria-live="polite">{compact ? <><span>{Number(month.slice(5))}月</span>{showLunar && <small>{selectedLunar?.month}{selectedLunar?.day === 1 ? '初一' : selectedLunar?.short}</small>}</> : monthLabel}</h2>
       <nav className="calendar-nav" aria-label="切换月份">
         <button type="button" aria-label="上个月" disabled={month === CALENDAR_MIN.slice(0, 7)} onClick={() => move(moveMonth(selected, -1))}><Icon name="chevron-left" size={15} /></button>
         <button type="button" className="calendar-today" onClick={() => move(today)}>今天</button>
         <button type="button" aria-label="下个月" disabled={month === CALENDAR_MAX.slice(0, 7)} onClick={() => move(moveMonth(selected, 1))}><Icon name="chevron-left" size={15} className="calendar-next" /></button>
       </nav>
     </div>
-    <table ref={grid} className="calendar-grid" role="grid" aria-labelledby="calendar-month" aria-describedby="calendar-keyboard-help">
+    <table ref={grid} className="calendar-grid" role="grid" aria-labelledby={`${uid}-month`} aria-describedby={`${uid}-help`}>
       <thead><tr>{WEEKDAYS.map(day => <th key={day} scope="col" abbr={`星期${day}`}>{day}</th>)}</tr></thead>
       <tbody>{Array.from({ length: 6 }, (_, week) => <tr key={week}>
         {days.slice(week * 7, week * 7 + 7).map(({ key, lunar, names, holiday }) => {
@@ -89,14 +90,15 @@ export function CalendarWidget({ now, settings }: { now: Date; settings: WidgetS
         })}
       </tr>)}</tbody>
     </table>
-    <p id="calendar-keyboard-help" className="calendar-sr-only">方向键选择日期，Home 和 End 跳至周首或周末，Page Up 和 Page Down 切换月份，按住 Shift 切换年份。</p>
-    <div className="calendar-selection" aria-live="polite" aria-atomic="true">
+    <p id={`${uid}-help`} className="calendar-sr-only">方向键选择日期，Home 和 End 跳至周首或周末，Page Up 和 Page Down 切换月份，按住 Shift 切换年份。</p>
+    {!compact && <div className="calendar-selection" aria-live="polite" aria-atomic="true">
       <div className="calendar-selection__date"><strong>{formatCalendarDate(selected, { month: 'long', day: 'numeric', weekday: 'long' })}</strong>
         {showHolidays && <span className="calendar-selection__status" data-kind={selectedHoliday?.kind}>{dayDescription(selected)}</span>}
       </div>
       {showLunar && <p>{selectedLunar ? `农历 ${selectedLunar.full}` : '此浏览器暂不支持农历'}{selectedFestivals.length > 0 && <span> · {selectedFestivals.join(' · ')}</span>}</p>}
     </div>
-    {showHolidays && <>
+    }
+    {!compact && showHolidays && <>
       <div className="calendar-upcoming">
         {upcoming ? <><span>{upcoming.ongoing ? '正在放假' : '下一段假期'}<strong>{upcoming.name}</strong></span><span>{upcoming.ongoing ? '假期中' : `距今 ${upcoming.daysUntil} 天`}<small>共 {upcoming.days} 天</small></span></>
           : <p>后续放假安排待更新</p>}

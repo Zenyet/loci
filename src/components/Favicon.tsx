@@ -1,7 +1,8 @@
 import type { CSSProperties } from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { Bookmark } from '../types';
-import { faviconCandidates } from '../services/chromeApi';
+import { acquireFavicon, subscribeFaviconPreferences } from '../services/faviconStorage';
+import type { ImageLease } from '../services/imageStore';
 import { scheduleAfterDocumentLoad } from '../utils/scheduleAfterDocumentLoad';
 
 const FAVICON_ATTEMPT_TIMEOUT_MS = 8000;
@@ -17,30 +18,30 @@ interface Props {
 /**
  * Color + letter chip with a site-favicon overlay. Favicon URLs are requested
  * only after `load` + a short delay so the tab can leave the "loading" state
- * first; unreachable hosts time out and we try common alternate paths.
+ * first; an unavailable gstatic image falls back to the letter chip.
  */
 export function Favicon({ bookmark, size = 22, fontSize = 10, radius = 5, style }: Props) {
   const [ok, setOk] = useState(false);
-  const [gateOpen, setGateOpen] = useState(false);
-  const [attempt, setAttempt] = useState(0);
-
-  const candidates = useMemo(() => faviconCandidates(bookmark.url), [bookmark.url]);
-  const src = gateOpen && attempt < candidates.length ? candidates[attempt] : null;
-
+  const [source, setSource] = useState<{ page: string; url: string } | null>(null);
+  const [revision, setRevision] = useState(0);
+  const src = source?.page === bookmark.url ? source.url : null;
+  useEffect(() => subscribeFaviconPreferences(() => setRevision(value => value + 1)), []);
   useEffect(() => {
-    setOk(false);
-    setAttempt(0);
-    setGateOpen(false);
-    if (candidates.length === 0) return;
-    return scheduleAfterDocumentLoad(() => setGateOpen(true));
-  }, [bookmark.url]);
-
+    const controller = new AbortController(); let lease: ImageLease | null = null;
+    setOk(false); setSource(null);
+    const cancel = scheduleAfterDocumentLoad(() => {
+      void acquireFavicon(bookmark.url, controller.signal).then(next => {
+        if (controller.signal.aborted) { next?.release(); return; }
+        lease = next; if (next) setSource({ page: bookmark.url, url: next.url });
+      }).catch(() => {});
+    });
+    return () => { cancel(); controller.abort(); lease?.release(); };
+  }, [bookmark.url, revision]);
   useEffect(() => {
     if (!src || ok) return;
-    const t = window.setTimeout(() => setAttempt((i) => i + 1), FAVICON_ATTEMPT_TIMEOUT_MS);
-    return () => window.clearTimeout(t);
-  }, [src, attempt, ok]);
-
+    const timer = window.setTimeout(() => setSource(null), FAVICON_ATTEMPT_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [src, ok]);
   const base: CSSProperties = {
     width: size,
     height: size,
@@ -54,16 +55,17 @@ export function Favicon({ bookmark, size = 22, fontSize = 10, radius = 5, style 
     <span className="favicon" style={base} aria-label={bookmark.name}>
       {src && (
         <img
-          key={`${src}-${attempt}`}
+          key={src}
           src={src}
           alt=""
-          loading="lazy"
+          loading="eager"
+          decoding="async"
           referrerPolicy="no-referrer"
           onLoad={(e) => {
             if (e.currentTarget.naturalWidth >= 8) setOk(true);
-            else setAttempt((i) => i + 1);
+            else setSource(null);
           }}
-          onError={() => setAttempt((i) => i + 1)}
+          onError={() => setSource(null)}
           style={{
             display: ok ? 'block' : 'none',
             width: '72%',

@@ -82,7 +82,7 @@ describe('continuous AI organizing workspace', () => {
 
   it('keeps a pending generation when settings close and resumes in the same section', async () => {
     const pending = deferred<typeof raw>(); mocks.group.mockReturnValue(pending.promise);
-    await openOrganizer(); await click('生成整理方案'); await click('关闭设置');
+    await openOrganizer(); await click('生成整理方案'); await act(async () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
     expect(container.querySelector('[role="dialog"]')).toBeNull();
     await act(async () => pending.resolve(raw));
     await click('设置');

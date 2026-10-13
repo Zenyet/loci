@@ -130,8 +130,6 @@ export const copy = {
     bgs: { flat: '纯色', grain: '颗粒', grid: '网格', image: '图片' },
     reduceMotion: '减少动效',
     reduceMotionHint: '缩短搜索聚焦与力导向动画',
-    showStrip: '显示底栏',
-    showStripHint: '底部的常用与最近访问入口',
     showEdges: '连线',
     showEdgesHint: '在相关站点之间显示连线（同类 / 同域名）。',
     aiProvider: 'AI 分类',

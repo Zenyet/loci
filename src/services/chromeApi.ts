@@ -1,7 +1,7 @@
 import type { Bookmark, BookmarkRoot, ChromeData, Group, HistoryItem, Settings } from '../types';
 import { DEFAULT_SETTINGS } from '../types';
 import { normalizeWidgets } from './widgetSettings';
-import { writeLocal } from './localStore';
+import { readWallpaperSettings, saveWallpaperSettings } from './wallpaperStorage';
 import {
   mockCreateBookmark,
   mockCreateFolder,
@@ -331,13 +331,14 @@ export function subscribeBookmarkChanges(cb: () => void): () => void {
 
 // ─── Settings (chrome.storage.local with localStorage fallback) ───────────
 
-const SETTINGS_KEY = 'newtab-settings';
 const VALID_THEMES = new Set(['dark', 'light', 'system']);
 
 const VALID_AI_PROVIDERS = new Set(['off', 'anthropic', 'openai', 'google', 'deepseek', 'alibaba', 'moonshot', 'zhipu', 'baichuan', 'minimax', 'openrouter', 'cloudflare', 'groq', 'custom']);
 
 export function normalizeSettings(raw: Partial<Settings> | null | undefined): Settings {
   const next = { ...DEFAULT_SETTINGS, ...(raw ?? {}) };
+  delete (next as Settings & { showStrip?: boolean }).showStrip;
+  next.bingWallpaper = next.bingWallpaper === true;
   if (!VALID_THEMES.has(next.theme)) next.theme = DEFAULT_SETTINGS.theme;
   const ai = { ...DEFAULT_SETTINGS.ai, ...(next.ai ?? {}) };
   // Migrate legacy provider IDs (type assertion needed for runtime migration)
@@ -362,20 +363,12 @@ export function normalizeSettings(raw: Partial<Settings> | null | undefined): Se
 }
 
 export async function loadSettings(): Promise<Settings> {
-  if (hasChromeApi && chrome.storage?.local) {
-    const obj = await chrome.storage.local.get(SETTINGS_KEY);
-    return normalizeSettings(obj[SETTINGS_KEY] || null);
-  }
-  try {
-    const raw = localStorage.getItem(SETTINGS_KEY);
-    return normalizeSettings(raw ? JSON.parse(raw) : null);
-  } catch {
-    return DEFAULT_SETTINGS;
-  }
+  try { return normalizeSettings(await readWallpaperSettings<Settings>()); }
+  catch { return DEFAULT_SETTINGS; }
 }
 
 export async function saveSettings(s: Settings): Promise<void> {
-  await writeLocal(SETTINGS_KEY, s);
+  await saveWallpaperSettings(s);
 }
 
 // ─── Todos persistence ────────────────────────────────────────────────────
@@ -419,21 +412,16 @@ export function bookmarkOriginKey(pageUrl: string): string | null {
   }
 }
 
-/**
- * Common locations tried in order — many sites omit /favicon.ico or only ship PNG / apple-touch.
- */
+/** Public origin only: paths, query strings, credentials and private hosts never leave the browser. */
 export function faviconCandidates(pageUrl: string): string[] {
   try {
-    const u = new URL(/^https?:\/\//.test(pageUrl) ? pageUrl : `https://${pageUrl}`);
-    const { origin } = u;
-    return [
-      `${origin}/apple-touch-icon.png`,
-      `${origin}/favicon.png`,
-      `${origin}/favicon.ico`,
-    ];
-  } catch {
-    return [];
-  }
+    const u = new URL(/^[a-z][a-z0-9+.-]*:/i.test(pageUrl) ? pageUrl : `https://${pageUrl}`);
+    const host = u.hostname.toLowerCase();
+    if (!['http:', 'https:'].includes(u.protocol) || !host.includes('.') || host.endsWith('.local') || host.endsWith('.localhost')
+      || host.endsWith('.internal') || host.includes(':') || /^\d+\.\d+\.\d+\.\d+$/.test(host)) return [];
+    const query = new URLSearchParams({ client: 'SOCIAL', type: 'FAVICON', fallback_opts: 'TYPE,SIZE,URL', url: `https://${host}`, size: '64' });
+    return [`https://t0.gstatic.cn/faviconV2?${query}`];
+  } catch { return []; }
 }
 
 /** First candidate only; prefer `faviconCandidates` when loading. */

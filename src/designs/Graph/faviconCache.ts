@@ -1,4 +1,6 @@
 import { bookmarkOriginKey, faviconCandidates } from '../../services/chromeApi';
+import { acquireFavicon } from '../../services/faviconStorage';
+import type { ImageLease } from '../../services/imageStore';
 import { scheduleAfterDocumentLoad } from '../../utils/scheduleAfterDocumentLoad';
 
 type Entry = HTMLImageElement | 'loading' | 'error';
@@ -21,15 +23,15 @@ export function isDrawableFaviconImage(img: HTMLImageElement): boolean {
 }
 
 /**
- * Lazily preloads site favicons after the document has fully loaded, trying
- * common paths in order. `ensureLoaded` triggers a background fetch and calls
+ * Lazily preloads gstatic favicons after the document has fully loaded. `ensureLoaded` triggers a background fetch and calls
  * `onReady` when an image succeeds — use this to request a redraw.
  * `get` returns a ready image or null (draw the letter fallback).
  */
 export class FaviconCache {
   private cache = new Map<string, Entry>();
   private origins = new Map<string, string | null>();
-  private queue = new Map<string, { urls: string[]; onReady: () => void }>();
+  private queue = new Map<string, { pageUrl: string; onReady: () => void }>();
+  private leases = new Map<string, ImageLease>();
   private active = new Map<string, () => void>();
   private cancelScheduled: (() => void) | null = null;
   private documentReady = false;
@@ -73,7 +75,7 @@ export class FaviconCache {
     const urls = faviconCandidates(pageUrl);
     if (urls.length === 0) return;
 
-    this.queue.set(key, { urls, onReady });
+    this.queue.set(key, { pageUrl, onReady });
     if (this.documentReady) this.pump();
     else if (!this.cancelScheduled) {
       this.cancelScheduled = scheduleAfterDocumentLoad(() => {
@@ -99,14 +101,15 @@ export class FaviconCache {
   private pump(): void {
     if (!this.documentReady) return;
     while (this.active.size < MAX_CONCURRENT_LOADS && this.queue.size) {
-      const [key, { urls, onReady }] = this.queue.entries().next().value!;
+      const [key, { pageUrl, onReady }] = this.queue.entries().next().value!;
       this.queue.delete(key);
       this.set(key, 'loading');
-      this.tryUrls(urls, key, onReady);
+      this.load(pageUrl, key, onReady);
     }
   }
 
   private set(key: string, entry: Entry): void {
+    if (!(entry instanceof HTMLImageElement)) { this.leases.get(key)?.release(); this.leases.delete(key); }
     if (this.cache.has(key)) this.cache.delete(key);
     this.cache.set(key, entry);
     this.trim();
@@ -117,59 +120,47 @@ export class FaviconCache {
       const oldest = this.cache.keys().next().value;
       if (oldest === undefined) return;
       this.cache.delete(oldest);
+      this.leases.get(oldest)?.release(); this.leases.delete(oldest);
     }
   }
 
-  private tryUrls(urls: string[], key: string, onReady: () => void, index = 0): void {
-    const url = urls[index];
+  clear(): void {
+    this.cancelPending();
+    for (const lease of this.leases.values()) lease.release();
+    this.leases.clear(); this.cache.clear();
+  }
+
+  private load(pageUrl: string, key: string, onReady: () => void): void {
     const img = new Image();
-    img.decoding = 'async';
-    img.referrerPolicy = 'no-referrer';
-
+    img.decoding = 'async'; img.referrerPolicy = 'no-referrer';
+    const controller = new AbortController();
+    let lease: ImageLease | null = null;
     let settled = false;
-    let timeoutId: ReturnType<typeof setTimeout> | undefined;
-    const finish = (next: 'ok' | 'retry') => {
-      if (settled) return;
-      settled = true;
-      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
-      img.onload = null;
-      img.onerror = null;
-      if (next === 'ok' && isDrawableFaviconImage(img)) {
-        this.set(key, img);
-        this.active.delete(key);
-        onReady();
-        this.pump();
-        return;
-      }
-      img.src = '';
-      if (index + 1 >= urls.length) {
-        this.set(key, 'error');
-        this.active.delete(key);
-        this.pump();
-      }
-      else this.tryUrls(urls, key, onReady, index + 1);
+    let timeout: number | undefined;
+    const finish = (ok: boolean) => {
+      if (settled) return; settled = true;
+      clearTimeout(timeout); img.onload = img.onerror = null;
+      if (ok && isDrawableFaviconImage(img) && lease) {
+        this.leases.set(key, lease); this.set(key, img); onReady();
+      } else { lease?.release(); img.src = ''; this.set(key, 'error'); }
+      this.active.delete(key); this.pump();
     };
-
-    timeoutId = window.setTimeout(() => finish('retry'), FAVICON_ATTEMPT_TIMEOUT_MS);
-
-    img.onload = () => {
-      if (!isDrawableFaviconImage(img)) {
-        finish('retry');
-        return;
-      }
-      const decoded =
-        typeof img.decode === 'function' ? img.decode() : Promise.resolve();
-      decoded.then(() => finish('ok'), () => finish('retry'));
-    };
-    img.onerror = () => finish('retry');
-
     this.active.set(key, () => {
-      settled = true;
-      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
-      img.onload = img.onerror = null;
-      img.src = '';
+      settled = true; controller.abort(); clearTimeout(timeout);
+      img.onload = img.onerror = null; img.src = ''; lease?.release();
     });
-
-    img.src = url;
+    img.onload = () => {
+      if (!isDrawableFaviconImage(img)) { finish(false); return; }
+      const decoded = typeof img.decode === 'function' ? img.decode() : Promise.resolve();
+      decoded.then(() => finish(true), () => finish(false));
+    };
+    img.onerror = () => finish(false);
+    void acquireFavicon(pageUrl, controller.signal).then(source => {
+      if (settled) { source?.release(); return; }
+      if (!source) { finish(false); return; }
+      lease = source;
+      timeout = window.setTimeout(() => finish(false), FAVICON_ATTEMPT_TIMEOUT_MS);
+      img.src = source.url;
+    }).catch(() => finish(false));
   }
 }

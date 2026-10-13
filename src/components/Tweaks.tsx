@@ -18,7 +18,7 @@ import {
   DEFAULT_CUSTOM_SEARCH_URL,
   SEARCH_PROVIDERS,
 } from "../services/searchProviders";
-import { SettingRow, SettingGroup, Switch } from "./SettingsControls";
+import { SettingRow, SettingGroup, SettingNotice, Switch } from "./SettingsControls";
 import { AiOrganizer } from "./AiOrganizer";
 import type { GroupingWorkflow } from "../hooks/useGrouping";
 import { Icon } from "./Icon";
@@ -28,10 +28,14 @@ import { WidgetSettings } from './widgets/WidgetSettings';
 import { useSurfaceDismiss } from '../hooks/useSurfaceDismiss';
 import { TextInput } from "./TextInput";
 import { Slider } from "./Slider";
-import { CloseButton } from "./CloseButton";
-import "./Tweaks.css";
+import { BingWallpaperSettings } from "./BingWallpaperSettings";
+import { FaviconSettings } from './FaviconSettings';
+import { useImageSource } from '../hooks/useImageSource';
+import { storeUploadedWallpaper } from '../services/wallpaperImages';
+import './Tweaks.css';
 
 interface Props {
+  onArrangeWidgets?: () => void;
   requestedSection?: { section: 'widgets' | 'ai'; revision: number };
   settings: Settings;
   onChange: (patch: Partial<Settings>) => void;
@@ -69,7 +73,7 @@ const SECTIONS: {
   {
     id: "behavior",
     title: "通用",
-    keywords: "行为 动效 连线 底栏 新标签页 打开方式",
+    keywords: "行为 动效 连线 新标签页 打开方式 网站 图标 favicon 缓存 容量 清理",
   },
   { id: "widgets", title: "小组件", keywords: "天气 城市 时间 时钟 日期 日历 农历 节假日 调休 待办 小组件" },
   {
@@ -99,13 +103,12 @@ const ACCENTS = [
   { hue: 150, label: "绿色" },
   { hue: 210, label: "青色" },
 ];
-const MAX_IMAGE_SIDE = 2400;
-const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
 
 function DesktopPreview({ settings }: { settings: Settings }) {
+  const image = useImageSource(settings.bgImage);
   const bg =
     settings.bg === "image" && settings.bgImage
-      ? backgroundImageCssValue(settings.bgImage)
+      ? backgroundImageCssValue(image.url)
       : undefined;
   return (
     <div
@@ -148,6 +151,7 @@ function DesktopPreview({ settings }: { settings: Settings }) {
 }
 
 export function Tweaks({
+  onArrangeWidgets,
   requestedSection,
   settings,
   onChange,
@@ -246,7 +250,7 @@ export function Tweaks({
     setError(null);
   };
   const applyImage = (value: string) => {
-    onChange({ bg: "image", bgImage: value });
+    onChange({ bg: "image", bgImage: value, bingWallpaper: false });
     setError(null);
   };
   const onFile = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -254,11 +258,7 @@ export function Tweaks({
     event.target.value = "";
     if (!file) return;
     try {
-      if (!file.type.startsWith("image/")) throw new Error("请选择图片文件。");
-      const compressed = await compressImage(file, MAX_IMAGE_SIDE);
-      if (compressed.length > MAX_IMAGE_BYTES)
-        throw new Error("图片压缩后仍超过 3 MB，请换一张较小的图片。");
-      applyImage(compressed);
+      applyImage(await storeUploadedWallpaper(file));
     } catch (cause) {
       setError(
         cause instanceof Error ? cause.message : "图片无法读取，请换一张试试。",
@@ -327,7 +327,6 @@ export function Tweaks({
             <aside className="settings-sidebar">
               <div className="settings-window-controls">
                 <span className="window-caption">设置</span>
-                <CloseButton onClick={onToggle} className="settings-window-close" label="关闭设置" />
               </div>
               <div className="settings-search">
                 <TextInput
@@ -504,6 +503,7 @@ export function Tweaks({
                               onClick={() =>
                                 onChange({
                                   bg: bg.id,
+                                  ...(bg.id !== "image" ? { bingWallpaper: false } : {}),
                                   ...(bg.id === "image" && !settings.bgImage
                                     ? { bgImage: GOLDEN_GATE_BACKGROUND }
                                     : {}),
@@ -518,6 +518,7 @@ export function Tweaks({
                     </SettingGroup>
                     {settings.bg === "image" && (
                       <>
+                        <BingWallpaperSettings settings={settings} onChange={onChange} />
                         <section
                           className="settings-group"
                           aria-label="精选壁纸"
@@ -530,9 +531,9 @@ export function Tweaks({
                               <button
                                 type="button"
                                 key={bg.id}
-                                className={`wallpaper-option${settings.bgImage === bg.value ? " is-selected" : ""}`}
+                                className={`wallpaper-option${!settings.bingWallpaper && settings.bgImage === bg.value ? " is-selected" : ""}`}
                                 aria-label={bg.label}
-                                aria-pressed={settings.bgImage === bg.value}
+                                aria-pressed={!settings.bingWallpaper && settings.bgImage === bg.value}
                                 onClick={() => applyImage(bg.value)}
                               >
                                 <span
@@ -543,7 +544,7 @@ export function Tweaks({
                                     ),
                                   }}
                                 >
-                                  {settings.bgImage === bg.value && (
+                                  {!settings.bingWallpaper && settings.bgImage === bg.value && (
                                     <span className="wallpaper-check">
                                       <Icon name="check" size={12} />
                                     </span>
@@ -570,17 +571,11 @@ export function Tweaks({
                                 <div className="wallpaper-saved" key={bg.id}>
                                   <button
                                     type="button"
-                                    className={`wallpaper-option${settings.bgImage === bg.value ? " is-selected" : ""}`}
-                                    aria-pressed={settings.bgImage === bg.value}
+                                    className={`wallpaper-option${!settings.bingWallpaper && settings.bgImage === bg.value ? " is-selected" : ""}`}
+                                    aria-pressed={!settings.bingWallpaper && settings.bgImage === bg.value}
                                     onClick={() => applyImage(bg.value)}
                                   >
-                                    <span
-                                      className="wallpaper-swatch"
-                                      style={{
-                                        backgroundImage:
-                                          backgroundImageCssValue(bg.value),
-                                      }}
-                                    />
+                                    <WallpaperSwatch value={bg.value} />
                                     <span>{bg.label}</span>
                                   </button>
                                   <button
@@ -768,16 +763,6 @@ export function Tweaks({
                   <>
                     <SettingGroup title="工作空间">
                       <SettingRow
-                        title="显示常用与最近访问"
-                        hint="在底部快速回到常用站点"
-                      >
-                        <Switch
-                          label="显示常用与最近访问"
-                          checked={settings.showStrip}
-                          onChange={(showStrip) => onChange({ showStrip })}
-                        />
-                      </SettingRow>
-                      <SettingRow
                         title="显示书签连线"
                         hint="在图谱中呈现站点之间的关联"
                       >
@@ -814,6 +799,7 @@ export function Tweaks({
                         />
                       </SettingRow>
                     </SettingGroup>
+                    <FaviconSettings />
                     <SettingGroup title="顺手的小技巧">
                       <SettingRow title="搜索书签">
                         <kbd>⌘ / Ctrl K</kbd>
@@ -830,15 +816,15 @@ export function Tweaks({
                     </SettingGroup>
                   </>
                 )}
-                {section === "widgets" && <WidgetSettings value={settings.widgets} onChange={widgets => onChange({ widgets })} />}
+                {section === "widgets" && <WidgetSettings data={data} onArrange={onArrangeWidgets} value={settings.widgets} onChange={widgets => onChange({ widgets })} />}
                 {section === "ai" && (
                   <AiOrganizer settings={settings} onChange={onChange} data={data}
                     flow={groupingFlow} aiReady={aiReady} onClassify={onClassify} classifying={classifying} />
                 )}
                 {error && (
-                  <p className="settings-error" role="alert">
+                  <SettingNotice tone="error" role="alert">
                     {error}
-                  </p>
+                  </SettingNotice>
                 )}
               </div>
             </main>
@@ -855,44 +841,7 @@ export function Tweaks({
     </>
   );
 }
-/**
- * Resize + re-encode a user-selected image to fit under our storage budget.
- * We cap the longest side at `maxSide` and encode JPEG at 0.85 quality; the
- * resulting data URL typically lands under a megabyte for 1080p-ish photos.
- */
-async function compressImage(file: File, maxSide: number): Promise<string> {
-  const dataUrl = await fileToDataUrl(file);
-  const img = await dataUrlToImage(dataUrl);
-  const { width, height } = img;
-  const scale = Math.min(1, maxSide / Math.max(width, height));
-  if (scale >= 1 && file.size <= MAX_IMAGE_BYTES) {
-    return dataUrl;
-  }
-  const w = Math.round(width * scale);
-  const h = Math.round(height * scale);
-  const canvas = document.createElement("canvas");
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return dataUrl;
-  ctx.drawImage(img, 0, 0, w, h);
-  return canvas.toDataURL("image/jpeg", 0.85);
-}
-
-function fileToDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const fr = new FileReader();
-    fr.onload = () => resolve(String(fr.result));
-    fr.onerror = () => reject(fr.error);
-    fr.readAsDataURL(file);
-  });
-}
-
-function dataUrlToImage(src: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error("decode failed"));
-    img.src = src;
-  });
+function WallpaperSwatch({ value }: { value: string }) {
+  const image = useImageSource(value);
+  return <span className="wallpaper-swatch" style={{ backgroundImage: backgroundImageCssValue(image.url) }} title={image.error || undefined} />;
 }

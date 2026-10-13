@@ -18,6 +18,7 @@
   --settings-sidebar: rgb(235 231 228 / 78%);
   --settings-border: rgb(52 44 40 / 9%);
   --settings-input: rgb(255 255 255 / 80%);
+  --settings-row-inset: 17px;
   width: min(940px, 100%);
   height: min(748px, calc(100dvh - 64px));
   min-height: 0;
@@ -60,18 +61,6 @@
   gap: 8px;
   padding: 12px 7px;
   flex-shrink: 0;
-}
-.settings-window-close {
-  width: 28px;
-  height: 28px;
-  border-radius: 9px;
-  color: var(--fg-2);
-  background: transparent;
-}
-.settings-window-close:hover,
-.settings-window-close:focus-visible {
-  color: var(--fg);
-  background: var(--ui-muted-bg);
 }
 .window-caption {
   font-size: 11px;
@@ -388,7 +377,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 18px;
-  margin: 0 15px;
+  margin: 0 var(--settings-row-inset);
   padding: 12px 0;
 }
 .settings-row + .settings-row {
@@ -418,6 +407,23 @@
   line-height: 1.7;
   color: var(--fg-2);
   margin: 8px 3px 0;
+  overflow-wrap: anywhere;
+}
+.settings-notice {
+  margin: 0;
+  padding: 12px var(--settings-row-inset);
+  color: var(--fg-2);
+  font-size: 12px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+.settings-notice--error {
+  color: var(--danger);
+}
+.settings-group-body > .settings-notice {
+  margin-inline: var(--settings-row-inset);
+  padding-inline: 0;
+  border-top: 1px solid var(--settings-border);
 }
 .settings-value {
   font-size: 11px;
@@ -623,7 +629,7 @@
   flex-direction: column;
   gap: 8px;
   padding: 13px 0;
-  margin: 0 15px;
+  margin: 0 var(--settings-row-inset);
   font-size: 12px;
 }
 .settings-field + .settings-field,
@@ -716,7 +722,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 0 15px;
+  margin: 0 var(--settings-row-inset);
   padding: 12px 0;
   border-top: 1px solid var(--settings-border);
   color: var(--fg-2);
@@ -800,11 +806,6 @@
 .settings-status.is-ready {
   background: #33a35e14;
   color: #43995a;
-}
-.settings-error {
-  font-size: 12px;
-  line-height: 1.5;
-  color: #d25a45;
 }
 .settings-connection {
   border-top: 1px solid var(--settings-border);
@@ -1040,7 +1041,6 @@ body[data-reduce-motion="1"] .settings-window * {
 }
 .settings-row {
   min-height: 65px;
-  margin: 0 17px;
 }
 .settings-url-row > .ui-text-field {
   flex: 1;
@@ -1121,3 +1121,5 @@ body[data-reduce-motion="1"] .settings-window * {
 @media (max-width: 560px) {
   .settings-nav-item > .preference-icon { width: 30px; height: 30px; flex-basis: 30px; }
 }
+
+.bing-wallpaper-preview { height: 155px; position: relative; display: grid; place-items: center; border-radius: 13px; overflow: hidden; background: linear-gradient(150deg,#83a4ab,#37615e); background-size: cover; background-position: center; color: white; }.bing-wallpaper-preview > span { position: absolute; bottom: 0; inset-inline: 0; padding: 20px 16px 12px; background: linear-gradient(transparent,#0007); font-size: 13px; }.bing-wallpaper-meta { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; padding: 0 var(--settings-row-inset) 13px; font-size: 10px; color: var(--fg-3); line-height: 1.6; }.bing-wallpaper-meta > span { flex: 1; min-width: 180px; }.bing-wallpaper-meta button, .bing-wallpaper-meta a { color: var(--accent); }.bing-wallpaper-meta button:disabled { opacity: .5; }

@@ -1,14 +1,15 @@
 export function WeatherGlyph({ code, isDay = true, size = 24 }: { code: number | null; isDay?: boolean; size?: number }) {
-  const sunny = code === 0 || code === 1;
+  const clear = code === 0 || code === 1;
   const rain = code !== null && ((code >= 51 && code <= 67) || (code >= 80 && code <= 82) || code >= 95);
   const snow = code !== null && ((code >= 71 && code <= 77) || code === 85 || code === 86);
   return <svg width={size} height={size} viewBox="0 0 48 48" fill="none" aria-hidden="true" className="weather-glyph">
-    {sunny && isDay && <g stroke="#cb932d" strokeWidth="2" strokeLinecap="round"><circle cx="24" cy="23" r="9" fill="#efc875" fillOpacity=".45" /><path d="M24 6v3m0 28v3M7 23h3m28 0h3M12 11l2 2m20 20 2 2M12 35l2-2m20-20 2-2" /></g>}
-    {sunny && !isDay && <path d="M29 7a17 17 0 1 0 12 25A16 16 0 0 1 29 7Z" fill="#b4bde4" stroke="#899bc9" strokeWidth="2" />}
-    {!sunny && <path d="M13 32h23a7.5 7.5 0 1 0-1.7-14.8A11 11 0 0 0 13 18a7 7 0 0 0 0 14Z" fill="currentColor" fillOpacity=".13" stroke="currentColor" strokeOpacity=".6" strokeWidth="2" />}
-    {rain && <path d="m17 37-2 4m10-4-2 4m10-4-2 4" stroke="#6d9cbd" strokeWidth="2.6" strokeLinecap="round" />}
-    {snow && <g fill="#7fa3bf"><circle cx="16" cy="39" r="2" /><circle cx="25" cy="41" r="2" /><circle cx="34" cy="38" r="2" /></g>}
-    {(code === 45 || code === 48) && <path d="M10 37h27M15 42h18" stroke="currentColor" strokeOpacity=".5" strokeWidth="2" strokeLinecap="round" />}
-    {code === null && <text x="24" y="27" fontSize="14" textAnchor="middle" fill="currentColor">?</text>}
+    {(clear || code === 2) && isDay && <g stroke="#ffd76d" strokeWidth="2.7" strokeLinecap="round"><circle cx="24" cy="22" r="9" fill="#ffd76d" stroke="none" /><path d="M24 5v4m0 27v4M7 22h4m26 0h4M12 10l3 3m18 18 3 3M12 34l3-3m18-18 3-3" /></g>}
+    {(clear || code === 2) && !isDay && <><path d="M26 6A17 17 0 1 0 42 29C28 33 20 19 26 6Z" fill="#fff" /><path d="m35 3 1.3 4.5L41 9l-4.7 1.5L35 15l-1.3-4.5L29 9l4.7-1.5ZM43 15l.8 2.6 2.7.9-2.7.9L43 22l-.8-2.6-2.7-.9 2.7-.9Z" fill="#fff" /></>}
+    {!clear && code !== null && <path d="M11 34h25a8 8 0 1 0-2-15.7A11.5 11.5 0 0 0 12 19a7.6 7.6 0 0 0-1 15Z" fill="#f1f4fa" stroke="#8c99ab" strokeOpacity=".3" />}
+    {rain && <path d="m16 39-2 4m11-4-2 4m11-4-2 4" stroke="#8cd6ff" strokeWidth="3" strokeLinecap="round" />}
+    {snow && <g fill="#d9efff"><circle cx="15" cy="40" r="2" /><circle cx="25" cy="43" r="2" /><circle cx="35" cy="40" r="2" /></g>}
+    {(code === 45 || code === 48) && <path d="M9 39h30M14 44h20" stroke="currentColor" strokeOpacity=".6" strokeWidth="2" strokeLinecap="round" />}
+    {code !== null && code >= 95 && <path d="m25 26-7 12h6l-3 9 12-15h-8l5-6Z" fill="#ffcf52" />}
+    {code === null && <path d="M14 25h20" stroke="currentColor" strokeWidth="3" strokeLinecap="round" opacity=".55" />}
   </svg>;
 }

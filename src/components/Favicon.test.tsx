@@ -6,7 +6,7 @@ import { Favicon } from './Favicon';
 let root: Root;
 let container: HTMLDivElement;
 const bookmark = { name: 'Example', url: 'https://example.test', color: '#345678', letter: 'E' };
-const advance = async (ms: number) => { await act(async () => { vi.advanceTimersByTime(ms); }); };
+const advance = async (ms: number) => { await act(async () => { await vi.advanceTimersByTimeAsync(ms); }); };
 async function render(url = bookmark.url) {
   await act(async () => root.render(<Favicon bookmark={{ ...bookmark, url }} />));
   await act(async () => { window.dispatchEvent(new Event('load')); });
@@ -19,7 +19,7 @@ async function loadImage() {
   return img;
 }
 beforeEach(() => {
-  vi.useFakeTimers();
+  localStorage.clear(); vi.useFakeTimers();
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   container = document.createElement('div'); document.body.append(container);
   root = createRoot(container);
@@ -35,22 +35,20 @@ it('keeps a successfully loaded icon visible beyond every fallback timeout', asy
   for (let i = 0; i < 4; i++) await advance(8000);
   expect(container.querySelector('img')).toBe(img);
   expect(img.style.display).toBe('block');
-  expect(img.src).toBe('https://example.test/apple-touch-icon.png');
+  expect(new URL(img.src).hostname).toBe('t0.gstatic.cn');
 });
 
-it('tries an alternate icon after a timeout and stops retrying once it loads', async () => {
+it('uses its letter when the gstatic request times out without requesting the original site', async () => {
   await render();
   await advance(8000);
-  const img = await loadImage();
-  expect(img.src).toBe('https://example.test/favicon.png');
-  await advance(8000);
-  expect(container.querySelector('img')).toBe(img);
+  expect(container.querySelector('img')).toBeNull();
+  expect(container.textContent).toBe('E');
 });
 
 it('resets the loaded state when a bookmark URL changes and falls back to its letter', async () => {
   await render(); await loadImage();
   await render('https://other.test');
-  expect(container.querySelector('img')?.src).toBe('https://other.test/apple-touch-icon.png');
+  expect(new URL(container.querySelector('img')!.src).searchParams.get('url')).toBe('https://other.test');
   expect(container.textContent).toBe('E');
   for (let i = 0; i < 3; i++) await advance(8000);
   expect(container.querySelector('img')).toBeNull();

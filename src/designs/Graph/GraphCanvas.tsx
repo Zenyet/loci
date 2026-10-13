@@ -2,6 +2,7 @@ import type { GroupColor, GroupColors } from '../../types';
 import type { CSSProperties } from 'react';
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import type { GraphEdge, GraphItem, GraphNode, Group, PinsMap } from '../../types';
+import { subscribeFaviconPreferences } from '../../services/faviconStorage';
 import { FaviconCache } from './faviconCache';
 import { buildNodeIndex, findEdgeAt, findNodeAt, type NodeIndex } from './hitTest';
 import { drawGraph, RenderTextCache, resizeCanvas, type RenderState, type Theme } from './render';
@@ -154,16 +155,18 @@ export function GraphCanvas(props: Props) {
     return nodeByIdRef.current;
   };
 
-  // Preload favicons whenever bookmarks change.
+  // Both the canvas and DOM icons share the same persistent image cache.
   useEffect(() => {
-    for (const b of props.bookmarks) {
-      if (b.nodeKind === 'group') continue;
-      faviconsRef.current.ensureLoaded(b.url, () => {
-        requestFrame();
-      });
-    }
-    return () => faviconsRef.current.cancelPending();
+    const load = () => {
+      for (const b of props.bookmarks) {
+        if (b.nodeKind !== 'group') faviconsRef.current.ensureLoaded(b.url, requestFrame);
+      }
+    };
+    load();
+    const unsubscribe = subscribeFaviconPreferences(() => { faviconsRef.current.clear(); load(); requestFrame(); });
+    return () => { unsubscribe(); faviconsRef.current.cancelPending(); };
   }, [props.bookmarks]);
+  useEffect(() => () => faviconsRef.current.clear(), []);
 
   // Force a redraw whenever render-relevant props change. Without this the
   // rAF loop would skip frames when the simulation has cooled (alpha ≈ 0),

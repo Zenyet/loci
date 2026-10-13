@@ -29,18 +29,18 @@ describe('DEFAULT_SETTINGS.showEdges', () => {
 });
 
 describe('faviconCandidates', () => {
-  it('prefers the high-res apple-touch-icon first, .ico last', () => {
-    expect(faviconCandidates('https://example.com')).toEqual([
-      'https://example.com/apple-touch-icon.png',
-      'https://example.com/favicon.png',
-      'https://example.com/favicon.ico',
-    ]);
+  it('uses only gstatic.cn with a public host, never credentials, paths or queries', () => {
+    const urls = faviconCandidates('https://user:secret@example.com/private?token=secret#fragment');
+    expect(urls).toHaveLength(1);
+    const url = new URL(urls[0]);
+    expect(url.hostname).toBe('t0.gstatic.cn');
+    expect(url.searchParams.get('url')).toBe('https://example.com');
+    expect(url.searchParams.get('size')).toBe('64');
+    expect(urls[0]).not.toContain('secret');
   });
-
-  it('tolerates a bare host without scheme', () => {
-    expect(faviconCandidates('example.com')[0]).toBe(
-      'https://example.com/apple-touch-icon.png'
-    );
+  it('tolerates a bare public host, but does not disclose local or non-web addresses', () => {
+    expect(faviconCandidates('example.com')).toEqual(faviconCandidates('https://example.com'));
+    for (const value of ['http://localhost', 'http://192.168.1.1', 'http://router.local', 'file:///etc/test', 'chrome://settings', 'http://[::1]']) expect(faviconCandidates(value)).toEqual([]);
   });
 
   it('returns [] for an unparseable url', () => {

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_SETTINGS, type WeatherCity, type WidgetSettings } from '../types';
 import { normalizeWidgets, patchWidgets } from './widgetSettings';
 import { bookmarkSearchScore } from './bookmarkSearch';
-import { loadWeather, parseForecast, refreshWeather, searchCities, weatherKey, weatherStorageKey, WEATHER_FRESH_MS } from './weather';
+import { loadWeather, parseForecast, refreshWeather, searchCities, upcomingWeatherHours, weatherKey, weatherStorageKey, WEATHER_FRESH_MS } from './weather';
 import { readTodos, mutateTodos, TODOS_KEY } from '../hooks/useTodos';
 import { writeLocal } from './localStore';
 
@@ -21,9 +21,9 @@ describe('widget settings migration', () => {
     expect(normalized.weather).toEqual({ enabled: true, city, unit: 'celsius' });
     const updated = patchWidgets(normalized, { clock: { enabled: true } });
     expect(updated.weather).toEqual(normalized.weather);
-    expect(updated.calendar).toEqual({ showLunar: true, showHolidays: true });
+    expect(updated.calendar).toEqual({ enabled: true, showLunar: true, showHolidays: true });
     const calendar = patchWidgets(updated, { calendar: { showLunar: false } });
-    expect(calendar.calendar).toEqual({ showLunar: false, showHolidays: true });
+    expect(calendar.calendar).toEqual({ enabled: true, showLunar: false, showHolidays: true });
     expect(calendar.weather).toEqual(normalized.weather);
     expect(normalizeWidgets({ weather: { city: { ...city, latitude: 900 } } } as WidgetSettings).weather.city).toBeNull();
   });
@@ -39,6 +39,18 @@ describe('bookmark search ranking', () => {
 });
 
 describe('weather request lifecycle', () => {
+  it('persists hourly forecasts and selects the next six hours in the city timezone across midnight', async () => {
+    const key = weatherKey(city, 'celsius');
+    const times = ['2026-09-19T23:00', ...Array.from({ length: 8 }, (_, hour) => `2026-09-20T0${hour}:00`)];
+    const data = parseForecast({ ...forecast, hourly: { time: times, temperature_2m: times.map(() => 20), weather_code: times.map(() => 0), is_day: times.map(() => 0) } }, key);
+    await writeLocal(weatherStorageKey(key), data);
+    const saved = (await loadWeather(key))!;
+    const hours = upcomingWeatherHours(saved, new Date('2026-09-19T16:30:00Z'));
+    expect(hours.map(hour => hour.time)).toEqual(times.slice(1, 7));
+    expect(hours[0]).toMatchObject({ temperature: 20, code: 0, isDay: false });
+    expect(upcomingWeatherHours({ ...saved, hours: undefined }, new Date())).toEqual([]);
+    expect(upcomingWeatherHours({ ...saved, timezone: 'invalid' }, new Date())).toEqual([]);
+  });
   it('rejects broken payloads while preserving missing numeric values as unavailable', () => {
     expect(() => parseForecast({}, 'key')).toThrow('天气数据不完整');
     expect(parseForecast({ ...forecast, current: { ...forecast.current, temperature_2m: null } }, 'key').temperature).toBeNull();

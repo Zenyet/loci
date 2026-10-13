@@ -11,6 +11,7 @@ const optionalNumber = finite.nullable();
 const weatherSchema = z.object({
   key: z.string(), fetchedAt: finite, timezone: z.string(), temperature: optionalNumber,
   apparent: optionalNumber, code: optionalNumber, isDay: z.boolean(),
+  hours: z.array(z.object({ time: z.string(), temperature: optionalNumber, code: optionalNumber, isDay: z.boolean() })).optional(),
   days: z.array(z.object({ date: z.string(), code: optionalNumber, high: optionalNumber, low: optionalNumber, rain: optionalNumber })),
 });
 export type WeatherData = z.infer<typeof weatherSchema>;
@@ -72,7 +73,8 @@ export async function searchCities(query: string, signal: AbortSignal): Promise<
 
 const forecastSchema = z.object({
   timezone: z.string(),
-  current: z.object({ temperature_2m: optionalNumber, apparent_temperature: optionalNumber, weather_code: optionalNumber, is_day: optionalNumber }),
+  current: z.object({ time: z.string().optional(), temperature_2m: optionalNumber, apparent_temperature: optionalNumber, weather_code: optionalNumber, is_day: optionalNumber }),
+  hourly: z.object({ time: z.array(z.string()), temperature_2m: z.array(optionalNumber), weather_code: z.array(optionalNumber), is_day: z.array(optionalNumber) }).optional(),
   daily: z.object({ time: z.array(z.string()), weather_code: z.array(optionalNumber), temperature_2m_max: z.array(optionalNumber),
     temperature_2m_min: z.array(optionalNumber), precipitation_probability_max: z.array(optionalNumber) }),
 });
@@ -80,9 +82,10 @@ const forecastSchema = z.object({
 export function parseForecast(raw: unknown, key: string, now = Date.now()): WeatherData {
   const parsed = forecastSchema.safeParse(raw);
   if (!parsed.success || parsed.data.daily.time.length < 3) throw new WeatherError('天气数据不完整，请稍后重试。');
-  const { current, daily, timezone } = parsed.data;
+  const { current, daily, hourly, timezone } = parsed.data;
   return { key, fetchedAt: now, timezone, temperature: current.temperature_2m, apparent: current.apparent_temperature,
     code: current.weather_code, isDay: current.is_day === 1,
+    hours: hourly?.time.map((time, i) => ({ time, temperature: hourly.temperature_2m[i] ?? null, code: hourly.weather_code[i] ?? null, isDay: hourly.is_day[i] === 1 })) ?? [],
     days: daily.time.slice(0, 3).map((date, i) => ({ date, code: daily.weather_code[i] ?? null,
       high: daily.temperature_2m_max[i] ?? null, low: daily.temperature_2m_min[i] ?? null, rain: daily.precipitation_probability_max[i] ?? null })) };
 }
@@ -106,6 +109,7 @@ export async function refreshWeather(city: WeatherCity, unit: TemperatureUnit, s
     const url = new URL('https://api.open-meteo.com/v1/forecast');
     url.search = new URLSearchParams({ latitude: String(city.latitude), longitude: String(city.longitude),
       current: 'temperature_2m,apparent_temperature,weather_code,is_day',
+      hourly: 'temperature_2m,weather_code,is_day',
       daily: 'weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max',
       timezone: 'auto', forecast_days: '3', temperature_unit: unit }).toString();
     try {
@@ -139,3 +143,13 @@ export function weatherDescription(code: number | null): string {
   return '天气未知';
 }
 export const displayTemperature = (value: number | null | undefined) => typeof value === 'number' && Number.isFinite(value) ? `${Math.round(value)}°` : '—';
+
+/** Open-Meteo hourly values use the selected city's wall time, never the device timezone. */
+export function upcomingWeatherHours(data: WeatherData, now: Date) {
+  try {
+    const parts = new Intl.DateTimeFormat('sv-SE', { timeZone: data.timezone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23' }).formatToParts(now);
+    const part = (type: string) => parts.find(item => item.type === type)?.value ?? '';
+    const hour = `${part('year')}-${part('month')}-${part('day')}T${part('hour')}:00`;
+    return (data.hours ?? []).filter(item => item.time >= hour).slice(0, 6);
+  } catch { return []; }
+}

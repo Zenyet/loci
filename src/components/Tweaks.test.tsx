@@ -98,7 +98,7 @@ describe("Settings window", () => {
     await render();
     const dialog = container.querySelector<HTMLElement>('[role="dialog"]')!;
     const close = container.querySelector<HTMLElement>(
-      '[aria-label="关闭设置"]',
+      '[aria-label="搜索设置"]',
     )!;
     const last = container.querySelector<HTMLElement>('[aria-label="青色"]')!;
     expect(document.activeElement).toBe(dialog);

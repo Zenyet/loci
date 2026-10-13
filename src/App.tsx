@@ -8,8 +8,6 @@ import { copy } from './i18n';
 import { makeClassifier } from './services/ai';
 import { analyzeTopics } from './services/ai/analyze';
 import { useGrouping } from './hooks/useGrouping';
-import { useInbox } from './hooks/useInbox';
-import { InboxPanel } from './components/InboxPanel';
 import './styles/tokens.css';
 import './styles/shell.css';
 
@@ -17,8 +15,8 @@ export default function App() {
   const { settings, resolvedTheme, update, ready } = useSettings();
   const { data, loading, error, refresh } = useChromeData();
   const [tweaksOpen, setTweaksOpen] = useState(false);
-  const [widgetPanelOpen, setWidgetPanelOpen] = useState(false);
-  const [inboxOpen, setInboxOpen] = useState(() => new URLSearchParams(window.location.search).get('view') === 'inbox');
+  const [widgetEditRequest, setWidgetEditRequest] = useState(0);
+  const [widgetEditing, setWidgetEditing] = useState(false);
   const [requestedSection, setRequestedSection] = useState<{ section: 'widgets' | 'ai'; revision: number }>();
   const [classifying, setClassifying] = useState(false);
   const classifyPending = useRef(false);
@@ -39,8 +37,7 @@ export default function App() {
     }
   };
 
-  const inbox = useInbox(data);
-  const groupingFlow = useGrouping(data, settings, refresh, inbox.folder?.id ?? null);
+  const groupingFlow = useGrouping(data, settings, refresh);
 
   const aiReady =
     settings.ai.provider !== 'off' &&
@@ -58,15 +55,15 @@ export default function App() {
 
   return (
     <div className="shell">
-      <div className="stage" ref={element => { if (element) element.inert = tweaksOpen || inboxOpen; }}>
-        {data ? <Graph data={data} settings={settings} resolvedTheme={resolvedTheme} topicsVersion={topicsVersion} interactionBlocked={tweaksOpen || widgetPanelOpen || inboxOpen}
-          inboxCount={inbox.bookmarks.length} onOpenInbox={() => setInboxOpen(true)} />
+      <div className="stage" ref={element => { if (element) element.inert = tweaksOpen; }}>
+        {data ? <Graph data={data} settings={settings} resolvedTheme={resolvedTheme} topicsVersion={topicsVersion} interactionBlocked={tweaksOpen || widgetEditing} />
           : <ExtensionState title="无法读取 Chrome 书签" body={error ?? '请刷新新标签页，或确认扩展权限仍然开启。'} actionLabel="重试" onAction={refresh} />}
       </div>
-      <WidgetDashboard chromeData={data ?? undefined} settings={settings.widgets} onChange={widgets => update({ widgets })}
-        blocked={tweaksOpen || inboxOpen} onPanelChange={setWidgetPanelOpen}
+      <WidgetDashboard editRequest={widgetEditRequest} chromeData={data ?? undefined} settings={settings.widgets} onChange={widgets => update({ widgets })}
+        blocked={tweaksOpen} onEditingChange={setWidgetEditing}
         onConfigure={() => { setRequestedSection({ section: 'widgets', revision: Date.now() }); setTweaksOpen(true); }} />
       <Tweaks
+        onArrangeWidgets={() => { setTweaksOpen(false); setWidgetEditRequest(value => value + 1); }}
         settings={settings}
         onChange={update}
         open={tweaksOpen}
@@ -78,12 +75,7 @@ export default function App() {
         data={data ?? undefined}
         groupingFlow={groupingFlow}
       />
-      {data && <InboxPanel open={inboxOpen} data={data} folder={inbox.folder} bookmarks={inbox.bookmarks}
-        ready={inbox.ready} error={inbox.error} settings={settings} organizing={['generating', 'applying', 'undoing'].includes(groupingFlow.stage)}
-        onClose={() => setInboxOpen(false)} onRefresh={refresh} onOrganize={selection => {
-          if (!groupingFlow.select?.(selection)) return;
-          setInboxOpen(false); setRequestedSection({ section: 'ai', revision: Date.now() }); setTweaksOpen(true);
-        }} />}
+
     </div>
   );
 }

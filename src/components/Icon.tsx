@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 export type IconName =
+  | "calendar"
   | "inbox"
   | "widgets"
   | "market"
@@ -49,6 +50,7 @@ export function Icon({
   className?: string;
 }) {
   const paths: Record<IconName, ReactNode> = {
+    calendar: <><rect x="3" y="5" width="18" height="16" rx="3" /><path d="M7 3v4m10-4v4M3 10h18M7 14h2m4 0h2m-8 4h2" /></>,
     market: <><path d="M4 4v16h16M7 14l4-4 3 2 6-7" /><path d="M15 5h5v5" /></>,
     inbox: <><path d="m4 4-2 10v5a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-5L20 4Z" fill="currentColor" fillOpacity=".1" /><path d="M2 14h6l2 3h4l2-3h6M8 8h8" /></>,
     widgets: <><rect x="3" y="3" width="7" height="7" rx="2" /><rect x="14" y="3" width="7" height="7" rx="2" /><rect x="3" y="14" width="7" height="7" rx="2" /><path d="M17.5 14v7M14 17.5h7" /></>,

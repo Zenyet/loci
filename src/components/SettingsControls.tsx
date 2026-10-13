@@ -24,7 +24,9 @@ export function Switch({
   checked,
   onChange,
   label,
+  disabled = false,
 }: {
+  disabled?: boolean;
   checked: boolean;
   onChange: (value: boolean) => void;
   label: string;
@@ -34,6 +36,7 @@ export function Switch({
       type="button"
       className="settings-switch"
       role="switch"
+      disabled={disabled}
       aria-checked={checked}
       aria-label={label}
       onClick={() => onChange(!checked)}
@@ -58,5 +61,21 @@ export function SettingGroup({
       <div className="settings-group-body">{children}</div>
       {note && <p className="settings-note">{note}</p>}
     </section>
+  );
+}
+
+export function SettingNotice({
+  children,
+  tone = "neutral",
+  role = "status",
+}: {
+  children: ReactNode;
+  tone?: "neutral" | "error";
+  role?: "status" | "alert";
+}) {
+  return (
+    <p className={`settings-notice settings-notice--${tone}`} role={role}>
+      {children}
+    </p>
   );
 }

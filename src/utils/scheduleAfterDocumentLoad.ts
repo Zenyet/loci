@@ -4,7 +4,7 @@
  * optional work like third-party favicon fetches.
  */
 export function scheduleAfterDocumentLoad(fn: () => void, delayMs = 200): () => void {
-  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  let timeoutId: number | null = null;
   let loadListener: (() => void) | null = null;
 
   const runDelayed = () => {

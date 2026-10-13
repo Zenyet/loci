@@ -1,4 +1,4 @@
-import { DEFAULT_SETTINGS, type WeatherCity, type WidgetId, type WidgetSettings, type WidgetToolId, type MarketInstrument } from '../types';
+import { DEFAULT_SETTINGS, type WeatherCity, type WidgetId, type WidgetSettings, type WidgetToolId, type MarketInstrument, type DesktopWidgetId, type WidgetPlacement } from '../types';
 
 export const MARKET_INDICES: MarketInstrument[] = [
   { kind: 'index', code: '000001.SH', name: '上证指数' },
@@ -29,8 +29,18 @@ export function normalizeWidgets(raw: Partial<WidgetSettings> | undefined): Widg
   const tools = defaults.order.filter((id): id is WidgetToolId => id !== 'clock' && id !== 'weather');
   const pinned = Array.isArray(raw?.pinned) ? raw.pinned : defaults.pinned;
   const instruments = [...MARKET_INDICES, ...watchlist];
+  const layout: Partial<Record<DesktopWidgetId, WidgetPlacement>> = {};
+  for (const id of [...defaults.order, 'calendar'] as DesktopWidgetId[]) {
+    const item = raw?.desktop?.layout?.[id];
+    if (item && Number.isFinite(item.x) && Number.isFinite(item.y)) layout[id] = {
+      x: Math.min(1, Math.max(0, item.x)), y: Math.min(1, Math.max(0, item.y)),
+      size: item.size === 'medium' || item.size === 'large' ? item.size : 'small',
+      ...(item.coordinateSpace === 'viewport' ? { coordinateSpace: 'viewport' as const } : {}),
+    };
+  }
   return {
     version: 1,
+    desktop: { appearance: ['light', 'dark', 'tinted'].includes(raw?.desktop?.appearance ?? '') ? raw!.desktop!.appearance : 'auto', layout },
     order: [...new Set([...order.filter((id): id is WidgetId => defaults.order.includes(id)), ...defaults.order])],
     pinned: [...new Set(pinned.filter(id => tools.includes(id)))].slice(0, 3),
     clock: { enabled: raw?.clock?.enabled === true, hour12: raw?.clock?.hour12 === true },
@@ -51,13 +61,14 @@ export function normalizeWidgets(raw: Partial<WidgetSettings> | undefined): Widg
       colors: raw?.market?.colors === 'green-up' || raw?.market?.colors === 'mono' ? raw.market.colors : 'red-up',
     },
     calendar: {
+      enabled: raw?.calendar?.enabled !== false,
       showLunar: raw?.calendar?.showLunar !== false,
       showHolidays: raw?.calendar?.showHolidays !== false,
     },
   };
 }
 
-type WidgetPatch = { [K in WidgetId | 'calendar']?: Partial<WidgetSettings[K]> } & { order?: WidgetId[]; pinned?: WidgetToolId[] };
+type WidgetPatch = { [K in WidgetId | 'calendar']?: Partial<WidgetSettings[K]> } & { order?: WidgetId[]; pinned?: WidgetToolId[]; desktop?: Partial<WidgetSettings['desktop']> };
 /** Keep legacy weather preferences, but display clock/weather as one card. */
 export function widgetCardOrder(settings: WidgetSettings): Exclude<WidgetId, 'weather'>[] {
   return [...new Set(settings.order.map(id => id === 'weather' ? 'clock' : id))];
@@ -65,6 +76,7 @@ export function widgetCardOrder(settings: WidgetSettings): Exclude<WidgetId, 'we
 
 export function patchWidgets(current: WidgetSettings, patch: WidgetPatch): WidgetSettings {
   return normalizeWidgets({ ...current, ...patch,
+    desktop: { ...current.desktop, ...patch.desktop },
     clock: { ...current.clock, ...patch.clock },
     weather: { ...current.weather, ...patch.weather },
     todos: { ...current.todos, ...patch.todos },

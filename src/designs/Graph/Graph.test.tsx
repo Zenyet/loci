@@ -4,7 +4,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { Graph } from './Graph';
 import { DEFAULT_SETTINGS, type ChromeData, type GraphItem } from '../../types';
 
-vi.mock('./GraphCanvas', () => ({ GraphCanvas: ({ bookmarks }: { bookmarks: GraphItem[] }) => <div data-testid="canvas">{bookmarks.map(bookmark => bookmark.name).join(',')}</div> }));
+vi.mock('./GraphCanvas', () => ({ GraphCanvas: ({ bookmarks, onCanvasMenu }: { bookmarks: GraphItem[]; onCanvasMenu: (x: number, y: number) => void }) => <div data-testid="canvas" onContextMenu={event => { event.preventDefault(); onCanvasMenu(20,20); }}>{bookmarks.map(bookmark => bookmark.name).join(',')}</div> }));
 let container: HTMLDivElement, root: Root;
 beforeEach(() => {
   localStorage.clear(); vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
@@ -28,17 +28,16 @@ it('makes every search result available, including the twelfth match', async () 
 it('filters sources without losing other data and prevents creating inside a managed source', async () => {
   const data: ChromeData = { bookmarks: [], groups: [{ id: 'managed', label: '组织', parentGroupId: null, depth: 0, rootId: 'managed', isRoot: true, readOnly: true }], roots: [{ id: 'bar', label: '书签栏', readOnly: false }, { id: 'managed', label: '组织', readOnly: true }], recents: [], barId: 'bar', source: 'chrome' };
   await act(async () => root.render(<Graph data={data} settings={DEFAULT_SETTINGS} resolvedTheme="light" />));
-  const select = container.querySelector<HTMLButtonElement>('[role="combobox"][aria-label="书签来源"]')!;
-  const key = async (key: string) => act(async () => select.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true })));
-  const add = [...container.querySelectorAll<HTMLButtonElement>('.graph-quick-actions button')].find(button => button.textContent === '添加')!;
-  await key('Enter'); await key('End'); await key('Enter');
-  expect(select.textContent).toBe('组织');
-  expect(add.disabled).toBe(true);
+  const menu = async () => act(async () => container.querySelector('[data-testid="canvas"]')!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true })));
+  const pick = async (label: string) => { const item = [...container.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(button => button.textContent?.includes(label))!; await act(async () => item.click()); };
+  await menu();
+  expect(container.querySelector('[role="menu"]')?.textContent).not.toContain('收件箱');
+  await pick('组织'); await menu();
+  expect(container.querySelector<HTMLButtonElement>('[role="menuitem"]')!.disabled).toBe(true);
   expect(container.querySelector('[data-testid="canvas"]')!.textContent).toContain('组织');
-  await key('Enter'); await key('ArrowUp'); await key('Enter');
-  expect(select.textContent).toBe('书签栏');
-  expect(add.disabled).toBe(false);
+  await pick('书签栏'); await menu();
+  expect(container.querySelector<HTMLButtonElement>('[role="menuitem"]')!.disabled).toBe(false);
   expect(container.querySelector('[data-testid="canvas"]')!.textContent).not.toContain('组织');
-  expect(document.activeElement).toBe(select);
-  expect(container.querySelector('.graph-search-input')).toBeNull();
+  expect(container.querySelector('.graph-quick-actions')).toBeNull();
+  expect(container.querySelector('.activity-dock')).toBeNull();
 });

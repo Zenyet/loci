@@ -12,7 +12,6 @@ import type {
   ResolvedTheme,
   Settings,
 } from "../../types";
-import { ActivityDock } from "../../components/ActivityDock";
 import { BookmarkDialog } from "../../components/BookmarkDialog";
 import { CloseButton } from "../../components/CloseButton";
 import { ContextMenu, type MenuItem } from "../../components/ContextMenu";
@@ -45,7 +44,6 @@ import { Icon } from "../../components/Icon";
 import { SearchProviderLogo } from "../../components/SearchProviderLogo";
 import { bookmarkSearchScore } from "../../services/bookmarkSearch";
 import { useSurfaceDismiss } from "../../hooks/useSurfaceDismiss";
-import { useClock } from "../../hooks/useClock";
 import "./graph-hud.css";
 import { folderHue, pickDistinctHue } from "./folderHue";
 import { GraphCanvas } from "./GraphCanvas";
@@ -67,7 +65,6 @@ import { countGroupBookmarks } from "./groupMetrics";
 import { topicHueById as computeTopicHueById } from "./topicHue";
 import { topicNeighborhood } from "./topicNeighborhood";
 import { isPlainLetterKey, isSearchShortcutKey } from "./keyboardShortcuts";
-import { Select } from '../../components/Select';
 
 interface Props {
   data: ChromeData;
@@ -75,8 +72,6 @@ interface Props {
   resolvedTheme: ResolvedTheme;
   topicsVersion?: number;
   interactionBlocked?: boolean;
-  inboxCount?: number;
-  onOpenInbox?: () => void;
 }
 
 type SearchHit = (
@@ -109,8 +104,7 @@ const isTextEntryElement = (el: HTMLElement | null): boolean => {
   return ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName);
 };
 
-export function Graph({ data, settings, resolvedTheme, topicsVersion, interactionBlocked = false, inboxCount = 0, onOpenInbox }: Props) {
-  const now = useClock();
+export function Graph({ data, settings, resolvedTheme, topicsVersion, interactionBlocked = false }: Props) {
   const [edges, setEdges] = useState<GraphEdge[]>([]);
   const [pins, setPins] = useState<PinsMap>({});
   const [filter, setFilter] = useState("");
@@ -506,6 +500,10 @@ export function Graph({ data, settings, resolvedTheme, topicsVersion, interactio
         separatorBefore: true,
         onClick: () => setGroupsOpen(true),
       },
+      ...(data.roots?.length ? [{ id: 'all', label: '全部书签' }, ...data.roots].map((root, index) => ({
+        label: `${sourceId === root.id ? '✓ ' : ''}${root.label}`, separatorBefore: index === 0,
+        onClick: () => { setSourceId(root.id); setScopeGroupId(null); setFocusedNodeId(null); },
+      })) : []),
     ];
   };
 
@@ -762,15 +760,7 @@ export function Graph({ data, settings, resolvedTheme, topicsVersion, interactio
 
   return (
     <div style={styles.root} className="graph-desktop">
-      <div className="graph-quick-actions" aria-label="书签操作">
-        {!!data.roots?.length && <Select label="书签来源" className="graph-source-select" value={sourceId}
-          options={[{ value: 'all', label: '全部书签' }, ...data.roots.map(root => ({ value: root.id, label: root.label, description: root.readOnly ? '只读来源' : undefined }))]}
-          onChange={value => { setSourceId(value); setScopeGroupId(null); setFocusedNodeId(null); }} />}
-        <button type="button" disabled={!writableParent} onClick={() => setAdding(true)}><Icon name="plus" size={14} />添加</button>
-        <button type="button" onClick={() => setGroupsOpen(true)}><Icon name="folder" size={14} />管理</button>
-        {onOpenInbox && <button type="button" className="inbox-entry" onClick={onOpenInbox}><Icon name="inbox" size={14} />收件箱<small>{inboxCount}</small></button>}
-      </div>
-      {!data.bookmarks.length && !data.groups.length && <div className="graph-empty-hint">从一个收藏开始，点击左下角「添加」。</div>}
+      {!data.bookmarks.length && !data.groups.length && <div className="graph-empty-hint">右键空白处，添加你的第一个收藏。</div>}
       <GraphCanvas
         interactionBlocked={interactionBlocked || searchOpen || groupsOpen || adding || !!editing || !!bmMenu || !!edgeMenu || !!groupMenu || !!canvasMenu}
         bookmarks={visibleGraphItems}
@@ -1085,14 +1075,6 @@ export function Graph({ data, settings, resolvedTheme, topicsVersion, interactio
           </div>
         )}
       </div>
-
-      {settings.showStrip && <ActivityDock
-        bookmarks={data.bookmarks}
-        recents={data.recents}
-        openInNewTab={settings.openInNewTab}
-        now={now}
-        blocked={interactionBlocked || searchOpen || groupsOpen || adding || !!editing || !!bmMenu || !!edgeMenu || !!groupMenu || !!canvasMenu}
-      />}
 
       {bmMenu && (
         <ContextMenu
